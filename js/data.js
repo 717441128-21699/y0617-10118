@@ -662,17 +662,27 @@ const DataStore = {
     getRecommendedProducts(limit = 8) {
         const products = this.getProducts();
         const sessions = this.getSessions().filter(s => s.status === 'completed');
+        const categories = this.getCategoryPerformance();
+        
+        const categoryScores = {};
+        categories.forEach((cat, i) => {
+            categoryScores[cat.categoryId] = categories.length - i;
+        });
+        
+        const totalCategoryGMV = categories.reduce((s, c) => s + c.totalGMV, 0);
         
         const productScores = products.map(product => {
             let score = 0;
             let sessionAppearances = 0;
             let totalConversion = 0;
+            let totalProductGMV = 0;
 
             sessions.forEach(session => {
                 const sp = session.products?.find(p => p.productId === product.id);
                 if (sp) {
                     sessionAppearances++;
                     totalConversion += sp.conversionRate;
+                    totalProductGMV += sp.gmv;
                 }
             });
 
@@ -680,47 +690,82 @@ const DataStore = {
             
             score += avgConversion * 1000;
             
-            const stockRatio = product.stock > 0 ? 1 : 0;
-            score *= stockRatio;
+            const categoryScore = categoryScores[product.categoryId] || 0;
+            score += categoryScore * 2;
             
             const discountRate = product.originalPrice > 0 ? 
                 (1 - product.livePrice / product.originalPrice) : 0;
             score += discountRate * 5;
+            
+            const stockScore = product.stock > product.stockWarning * 3 ? 3 :
+                              product.stock > product.stockWarning * 2 ? 2 :
+                              product.stock > product.stockWarning ? 1 : 0;
+            score += stockScore * 1.5;
+            
+            if (sessionAppearances > 0) {
+                score += Math.log10(totalProductGMV + 1) * 0.5;
+            }
+            
+            const stockLevel = product.stock > product.stockWarning * 3 ? 'high' :
+                              product.stock > product.stockWarning * 2 ? 'medium' :
+                              product.stock > product.stockWarning ? 'low' : 'critical';
+            
+            const categoryHeat = totalCategoryGMV > 0 ? 
+                (categories.find(c => c.categoryId === product.categoryId)?.totalGMV / totalCategoryGMV * 100 || 0) : 0;
 
             return {
                 ...product,
                 score: Math.round(score * 100) / 100,
-                reason: this.generateRecommendReason(product, avgConversion, discountRate)
+                stockLevel,
+                categoryHeat: Math.round(categoryHeat * 10) / 10,
+                avgConversion: Math.round(avgConversion * 10000) / 100,
+                sessionAppearances,
+                reason: this.generateRecommendReason(product, avgConversion, discountRate, stockLevel, categoryHeat)
             };
         });
 
         return productScores
-            .filter(p => p.stock > 0)
+            .filter(p => p.stock > p.stockWarning)
             .sort((a, b) => b.score - a.score)
             .slice(0, limit);
     },
 
-    generateRecommendReason(product, conversionRate, discountRate) {
+    generateRecommendReason(product, conversionRate, discountRate, stockLevel, categoryHeat) {
         const reasons = [];
         
-        if (conversionRate > 0.1) {
-            reasons.push('历史转化率高');
+        if (conversionRate > 0.08) {
+            reasons.push({ type: 'conversion', text: '历史转化率高', icon: '📈' });
+        } else if (conversionRate > 0.03) {
+            reasons.push({ type: 'conversion', text: '转化率良好', icon: '📈' });
         }
+        
+        if (categoryHeat > 20) {
+            reasons.push({ type: 'category', text: '所属类目热度高', icon: '🔥' });
+        } else if (categoryHeat > 10) {
+            reasons.push({ type: 'category', text: '类目表现不错', icon: '🔥' });
+        }
+        
+        if (stockLevel === 'high') {
+            reasons.push({ type: 'stock', text: '库存非常充足', icon: '📦' });
+        } else if (stockLevel === 'medium') {
+            reasons.push({ type: 'stock', text: '库存充足', icon: '📦' });
+        }
+        
         if (discountRate > 0.4) {
-            reasons.push('折扣力度大');
+            reasons.push({ type: 'discount', text: '折扣力度大', icon: '💰' });
+        } else if (discountRate > 0.2) {
+            reasons.push({ type: 'discount', text: '价格有优势', icon: '💰' });
         }
-        if (product.stock > 500) {
-            reasons.push('库存充足');
-        }
+        
         if (product.totalSales > 300000) {
-            reasons.push('累计销量高');
+            reasons.push({ type: 'sales', text: '累计销量高', icon: '🏆' });
         }
         
         if (reasons.length === 0) {
-            reasons.push('潜力商品推荐上播效果不错');
+            reasons.push({ type: 'potential', text: '潜力商品，推荐测试', icon: '⭐' });
         }
         
-        return reasons.join('，') + '，推荐上播';
+        return reasons;
     },
 
     getRecentSessions(limit = 5) {

@@ -1055,14 +1055,18 @@ const App = {
                             </div>
                         </div>
 
-                        <div class="live-stats">
+                        <div class="live-stats" style="grid-template-columns:repeat(5,1fr);">
                             <div class="live-stat">
                                 <div class="live-stat-value" id="liveViewers">${(currentSession.peakViewers || 0).toLocaleString()}</div>
                                 <div class="live-stat-label">观看人数</div>
                             </div>
                             <div class="live-stat">
+                                <div class="live-stat-value" id="productOrders">${currentProduct.soldQuantity}</div>
+                                <div class="live-stat-label">当前商品订单</div>
+                            </div>
+                            <div class="live-stat">
                                 <div class="live-stat-value" id="liveOrders">${currentSession.totalOrders}</div>
-                                <div class="live-stat-label">本场订单</div>
+                                <div class="live-stat-label">本场总订单</div>
                             </div>
                             <div class="live-stat">
                                 <div class="live-stat-value" style="color:var(--primary-color);" id="liveGMV">¥${(currentSession.totalGMV / 10000).toFixed(1)}万</div>
@@ -1109,11 +1113,11 @@ const App = {
                     </div>
 
                     <div class="live-controls">
-                        <button class="control-btn prev" ${currentIndex === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} 
+                        <button class="control-btn prev" id="prevBtn" ${currentIndex === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} 
                                 onclick="App.prevProduct()">
                             ◀ 上一个
                         </button>
-                        <button class="control-btn next" ${currentIndex === products.length - 1 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}
+                        <button class="control-btn next" id="nextBtn" ${currentIndex === products.length - 1 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}
                                 onclick="App.nextProduct()">
                             下一个 ▶
                         </button>
@@ -1220,6 +1224,9 @@ const App = {
             this.liveState.peakViewers = Math.max(this.liveState.peakViewers || 0, currentViewers);
             this.liveState.totalViewers = (this.liveState.totalViewers || 0) + Math.abs(viewerChange);
 
+            currentProduct.viewers = (currentProduct.viewers || 0) + Math.abs(viewerChange) + Math.floor(Math.random() * 50);
+            currentProduct.peakViewers = Math.max(currentProduct.peakViewers || 0, currentViewers);
+
             DataStore.setCurrentSession(this.liveState);
             this.updateLiveViewers(currentViewers);
         }, 2000);
@@ -1241,14 +1248,21 @@ const App = {
         const currentProduct = this.liveState.products[currentIndex];
         if (!currentProduct) return;
 
+        const isLowStock = currentProduct.currentStock <= currentProduct.stockWarning;
+
         const stockEl = document.getElementById('liveStock');
         if (stockEl) {
             stockEl.textContent = currentProduct.currentStock;
-            if (currentProduct.currentStock <= currentProduct.stockWarning) {
+            if (isLowStock) {
                 stockEl.classList.add('danger');
             } else {
                 stockEl.classList.remove('danger');
             }
+        }
+
+        const productOrdersEl = document.getElementById('productOrders');
+        if (productOrdersEl) {
+            productOrdersEl.textContent = currentProduct.soldQuantity;
         }
 
         const ordersEl = document.getElementById('liveOrders');
@@ -1265,6 +1279,19 @@ const App = {
         if (progressEl) {
             const percent = (currentProduct.soldQuantity / currentProduct.initialStock) * 100;
             progressEl.style.width = percent + '%';
+            progressEl.classList.remove('success', 'warning', 'danger');
+            if (isLowStock) {
+                progressEl.classList.add('danger');
+            } else if (percent > 70) {
+                progressEl.classList.add('warning');
+            } else {
+                progressEl.classList.add('success');
+            }
+        }
+
+        const stockTextEl = document.querySelector('.progress-bar')?.previousElementSibling;
+        if (stockTextEl) {
+            stockTextEl.innerHTML = `<span>库存进度</span><span>${currentProduct.soldQuantity} / ${currentProduct.initialStock} 已售</span>`;
         }
 
         const queueList = document.getElementById('productQueueList');
@@ -1320,6 +1347,9 @@ const App = {
         });
 
         const currentProduct = this.liveState.products[index];
+        const isLowStock = currentProduct.currentStock <= currentProduct.stockWarning;
+        const products = this.liveState.products;
+
         const currentImage = document.querySelector('.current-product-image');
         const currentName = document.querySelector('.current-product-name');
         const currentPrice = document.querySelector('.current-price');
@@ -1335,9 +1365,101 @@ const App = {
             discountTag.textContent = discount + '% OFF';
         }
 
-        const orderBadge = document.querySelector('.badge.badge-info');
+        const currentProductHeader = document.querySelector('.current-product-header');
+        if (currentProductHeader) {
+            let scriptBox = document.querySelector('.current-script-box');
+            if (currentProduct.script) {
+                if (!scriptBox) {
+                    scriptBox = document.createElement('div');
+                    scriptBox.className = 'current-script-box';
+                    scriptBox.style.cssText = 'padding:12px;background:var(--bg-primary);border-radius:8px;font-size:13px;color:var(--text-secondary);margin-top:12px;';
+                    const detailEl = document.querySelector('.current-product-detail');
+                    if (detailEl) detailEl.appendChild(scriptBox);
+                }
+                scriptBox.innerHTML = `<strong style="color:var(--text-primary);">📝 串讲要点：</strong>${currentProduct.script}`;
+            } else if (scriptBox) {
+                scriptBox.remove();
+            }
+        }
+
+        const stockWarningBadge = document.querySelector('.current-product .badge.badge-danger');
+        const headerRight = document.querySelector('.current-product > div:first-child');
+        if (headerRight) {
+            const existingWarning = headerRight.querySelector('.badge.badge-danger');
+            if (isLowStock) {
+                if (!existingWarning) {
+                    const warningSpan = document.createElement('span');
+                    warningSpan.className = 'badge badge-danger';
+                    warningSpan.textContent = '⚠️ 库存紧张';
+                    headerRight.appendChild(warningSpan);
+                }
+            } else if (existingWarning) {
+                existingWarning.remove();
+            }
+        }
+
+        const orderBadge = document.querySelector('.current-product .badge.badge-info');
         if (orderBadge) {
-            orderBadge.textContent = `第 ${index + 1} / ${this.liveState.products.length} 个`;
+            orderBadge.textContent = `第 ${index + 1} / ${products.length} 个`;
+        }
+
+        const productOrdersEl = document.getElementById('productOrders');
+        if (productOrdersEl) {
+            productOrdersEl.textContent = currentProduct.soldQuantity;
+        }
+
+        const stockEl = document.getElementById('liveStock');
+        if (stockEl) {
+            stockEl.textContent = currentProduct.currentStock;
+            if (isLowStock) {
+                stockEl.classList.add('danger');
+            } else {
+                stockEl.classList.remove('danger');
+            }
+        }
+
+        const progressEl = document.getElementById('stockProgress');
+        if (progressEl) {
+            const percent = (currentProduct.soldQuantity / currentProduct.initialStock) * 100;
+            progressEl.style.width = percent + '%';
+            progressEl.classList.remove('success', 'warning', 'danger');
+            if (isLowStock) {
+                progressEl.classList.add('danger');
+            } else if (percent > 70) {
+                progressEl.classList.add('warning');
+            } else {
+                progressEl.classList.add('success');
+            }
+        }
+
+        const stockTextEl = document.querySelector('.progress-bar')?.previousElementSibling;
+        if (stockTextEl) {
+            stockTextEl.innerHTML = `<span>库存进度</span><span>${currentProduct.soldQuantity} / ${currentProduct.initialStock} 已售</span>`;
+        }
+
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        if (prevBtn) {
+            if (index === 0) {
+                prevBtn.disabled = true;
+                prevBtn.style.opacity = '0.5';
+                prevBtn.style.cursor = 'not-allowed';
+            } else {
+                prevBtn.disabled = false;
+                prevBtn.style.opacity = '1';
+                prevBtn.style.cursor = 'pointer';
+            }
+        }
+        if (nextBtn) {
+            if (index === products.length - 1) {
+                nextBtn.disabled = true;
+                nextBtn.style.opacity = '0.5';
+                nextBtn.style.cursor = 'not-allowed';
+            } else {
+                nextBtn.disabled = false;
+                nextBtn.style.opacity = '1';
+                nextBtn.style.cursor = 'pointer';
+            }
         }
 
         this.updateLiveUI();
@@ -1372,6 +1494,11 @@ const App = {
         session.avgWatchTime = 15 + Math.random() * 10;
 
         session.products.forEach(p => {
+            p.endStock = p.currentStock;
+            p.initialStock = p.initialStock || p.currentStock + p.soldQuantity;
+            p.viewers = p.viewers || 0;
+            p.conversionRate = p.viewers > 0 ? p.soldQuantity / p.viewers : 0;
+            
             const product = DataStore.getProductById(p.productId);
             if (product) {
                 DataStore.updateProduct(p.productId, {
@@ -1382,11 +1509,13 @@ const App = {
             }
         });
 
-        DataStore.addSession(session);
+        const sessionCopy = JSON.parse(JSON.stringify(session));
+        delete sessionCopy.currentProductIndex;
+        DataStore.addSession(sessionCopy);
         DataStore.clearCurrentSession();
         this.liveState = null;
 
-        this.showSessionDetail(session.id, true);
+        this.showSessionDetail(sessionCopy.id, true);
     },
 
     startQuickLive() {
@@ -1441,6 +1570,7 @@ const App = {
         const sessions = DataStore.getSessions().filter(s => s.status === 'completed');
         const topProducts = DataStore.getTopProducts(10);
         const categories = DataStore.getCategoryPerformance();
+        const allHosts = [...new Set(sessions.map(s => s.host))];
 
         const formatMoney = (num) => {
             if (num >= 10000) {
@@ -1459,86 +1589,418 @@ const App = {
         const maxGMV = sessions.length > 0 ? Math.max(...sessions.map(s => s.totalGMV)) : 1;
 
         return `
-            <div class="stats-grid">
+            <div class="tabs" style="margin-bottom:20px;">
+                <div class="tab-item active" data-report-tab="overview" onclick="App.switchReportTab('overview')">数据概览</div>
+                <div class="tab-item" data-report-tab="compare" onclick="App.switchReportTab('compare')">多场对比分析</div>
+            </div>
+
+            <div id="reportOverview">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon red">💰</div>
+                        </div>
+                        <div class="stat-value">¥${formatMoney(sessions.reduce((s, x) => s + x.totalGMV, 0))}</div>
+                        <div class="stat-label">总GMV</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon green">📦</div>
+                        </div>
+                        <div class="stat-value">${sessions.reduce((s, x) => s + x.totalOrders, 0).toLocaleString()}</div>
+                        <div class="stat-label">总订单数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon blue">👀</div>
+                        </div>
+                        <div class="stat-value">${formatMoney(sessions.reduce((s, x) => s + x.totalViewers, 0))}</div>
+                        <div class="stat-label">总观看人次</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon orange">🎬</div>
+                        </div>
+                        <div class="stat-value">${sessions.length}</div>
+                        <div class="stat-label">直播场次</div>
+                    </div>
+                </div>
+
+                <div class="two-column">
+                    <div class="chart-container">
+                        <div class="chart-title">场次GMV趋势</div>
+                        ${sessions.length > 0 ? `
+                            <div class="bar-chart" style="height:220px;">
+                                ${sessions.slice().reverse().map(s => `
+                                    <div class="bar-item">
+                                        <div class="bar" style="height:${(s.totalGMV / maxGMV * 100)}%" title="¥${formatMoney(s.totalGMV)}"></div>
+                                        <div class="bar-label">${s.date.slice(5)}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">暂无数据</div></div>'}
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">类目表现对比</div>
+                        </div>
+                        <div class="card-body">
+                            ${categories.length > 0 ? `
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>类目</th>
+                                            <th>GMV</th>
+                                            <th>销量</th>
+                                            <th>场次</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${categories.map(cat => `
+                                            <tr>
+                                                <td style="font-weight:500;">${cat.categoryName}</td>
+                                                <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(cat.totalGMV)}</td>
+                                                <td>${formatNumber(cat.totalSold)}件</td>
+                                                <td>${cat.sessionCount}场</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            ` : '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">暂无数据</div></div>'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top:20px;">
+                    <div class="card-header">
+                        <div class="card-title">直播场次记录</div>
+                    </div>
+                    <div class="card-body">
+                        ${sessions.length > 0 ? `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>场次名称</th>
+                                        <th>日期</th>
+                                        <th>主播</th>
+                                        <th>时长</th>
+                                        <th>峰值观看</th>
+                                        <th>GMV</th>
+                                        <th>订单数</th>
+                                        <th>转化率</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${sessions.map(s => `
+                                        <tr>
+                                            <td style="font-weight:500;">${s.title}</td>
+                                            <td>${s.date}</td>
+                                            <td>${s.host}</td>
+                                            <td>${s.duration}分钟</td>
+                                            <td>${formatNumber(s.peakViewers)}</td>
+                                            <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(s.totalGMV)}</td>
+                                            <td>${formatNumber(s.totalOrders)}</td>
+                                            <td>
+                                                <span class="badge badge-success">${(s.conversionRate * 100).toFixed(2)}%</span>
+                                            </td>
+                                            <td>
+                                                <button class="action-btn" onclick="App.showSessionDetail('${s.id}')">查看详情</button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        ` : '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">暂无直播记录</div></div>'}
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top:20px;">
+                    <div class="card-header">
+                        <div class="card-title">商品销售排行榜</div>
+                    </div>
+                    <div class="card-body">
+                        ${topProducts.length > 0 ? `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>商品</th>
+                                        <th>类目</th>
+                                        <th>累计GMV</th>
+                                        <th>累计销量</th>
+                                        <th>上播次数</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${topProducts.map((p, i) => `
+                                        <tr>
+                                            <td>
+                                                <span class="badge ${i < 3 ? 'badge-warning' : 'badge-default'}" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;padding:0;">
+                                                    ${i + 1}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div style="display:flex;align-items:center;gap:10px;">
+                                                    <span style="font-size:24px;">${p.image}</span>
+                                                    <span style="font-size:13px;">${p.productName}</span>
+                                                </div>
+                                            </td>
+                                            <td>${p.category || '-'}</td>
+                                            <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(p.totalGMV)}</td>
+                                            <td>${formatNumber(p.totalSold)}件</td>
+                                            <td>${p.sessionCount}次</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        ` : '<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-text">暂无销售数据</div></div>'}
+                    </div>
+                </div>
+            </div>
+
+            <div id="reportCompare" style="display:none;">
+                <div class="card" style="margin-bottom:20px;">
+                    <div class="card-header">
+                        <div class="card-title">筛选条件</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="filter-bar" style="margin-bottom:0;">
+                            <div class="filter-item">
+                                <label style="font-size:13px;color:var(--text-secondary);margin-right:6px;">商品类目：</label>
+                                <select id="compareCategoryFilter" onchange="App.applyCompareFilters()">
+                                    <option value="">全部类目</option>
+                                    ${categories.map(c => `<option value="${c.categoryId}">${c.categoryName}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="filter-item">
+                                <label style="font-size:13px;color:var(--text-secondary);margin-right:6px;">主播：</label>
+                                <select id="compareHostFilter" onchange="App.applyCompareFilters()">
+                                    <option value="">全部主播</option>
+                                    ${allHosts.map(h => `<option value="${h}">${h}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="filter-item">
+                                <label style="font-size:13px;color:var(--text-secondary);margin-right:6px;">开始日期：</label>
+                                <input type="date" id="compareStartDate" onchange="App.applyCompareFilters()">
+                            </div>
+                            <div class="filter-item">
+                                <label style="font-size:13px;color:var(--text-secondary);margin-right:6px;">结束日期：</label>
+                                <input type="date" id="compareEndDate" onchange="App.applyCompareFilters()">
+                            </div>
+                            <div class="filter-item">
+                                <button class="btn btn-sm btn-outline" onclick="App.resetCompareFilters()">重置筛选</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="compareResults">
+                    ${this.renderCompareResults(sessions, categories, topProducts)}
+                </div>
+            </div>
+        `;
+    },
+
+    bindReportEvents() {
+    },
+
+    switchReportTab(tab) {
+        document.querySelectorAll('[data-report-tab]').forEach(item => {
+            item.classList.remove('active');
+            if (item.dataset.reportTab === tab) {
+                item.classList.add('active');
+            }
+        });
+
+        document.getElementById('reportOverview').style.display = tab === 'overview' ? 'block' : 'none';
+        document.getElementById('reportCompare').style.display = tab === 'compare' ? 'block' : 'none';
+    },
+
+    renderCompareResults(sessions, categories, topProducts) {
+        const formatMoney = (num) => {
+            if (num >= 10000) {
+                return (num / 10000).toFixed(1) + '万';
+            }
+            return num.toLocaleString();
+        };
+
+        const formatNumber = (num) => {
+            if (num >= 10000) {
+                return (num / 10000).toFixed(1) + '万';
+            }
+            return num.toLocaleString();
+        };
+
+        const sortedSessions = [...sessions].sort((a, b) => b.totalGMV - a.totalGMV);
+        const bestSession = sortedSessions[0];
+        const worstSession = sortedSessions[sortedSessions.length - 1];
+
+        const avgGMV = sessions.length > 0 ? sessions.reduce((s, x) => s + x.totalGMV, 0) / sessions.length : 0;
+        const avgConversion = sessions.length > 0 ? sessions.reduce((s, x) => s + x.conversionRate, 0) / sessions.length : 0;
+
+        const maxGMV = sessions.length > 0 ? Math.max(...sessions.map(s => s.totalGMV)) : 1;
+
+        return `
+            <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon green">🏆</div>
+                    </div>
+                    <div class="stat-value" style="font-size:20px;">${sessions.length}</div>
+                    <div class="stat-label">对比场次</div>
+                </div>
                 <div class="stat-card">
                     <div class="stat-header">
                         <div class="stat-icon red">💰</div>
                     </div>
-                    <div class="stat-value">¥${formatMoney(sessions.reduce((s, x) => s + x.totalGMV, 0))}</div>
-                    <div class="stat-label">总GMV</div>
+                    <div class="stat-value" style="font-size:20px;">¥${formatMoney(avgGMV)}</div>
+                    <div class="stat-label">场均GMV</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-header">
-                        <div class="stat-icon green">📦</div>
+                        <div class="stat-icon blue">📈</div>
                     </div>
-                    <div class="stat-value">${sessions.reduce((s, x) => s + x.totalOrders, 0).toLocaleString()}</div>
-                    <div class="stat-label">总订单数</div>
+                    <div class="stat-value" style="font-size:20px;">${(avgConversion * 100).toFixed(2)}%</div>
+                    <div class="stat-label">平均转化率</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-header">
-                        <div class="stat-icon blue">👀</div>
+                        <div class="stat-icon orange">📦</div>
                     </div>
-                    <div class="stat-value">${formatMoney(sessions.reduce((s, x) => s + x.totalViewers, 0))}</div>
-                    <div class="stat-label">总观看人次</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div class="stat-icon orange">🎬</div>
-                    </div>
-                    <div class="stat-value">${sessions.length}</div>
-                    <div class="stat-label">直播场次</div>
+                    <div class="stat-value" style="font-size:20px;">${topProducts.length}</div>
+                    <div class="stat-label">涉及商品数</div>
                 </div>
             </div>
 
-            <div class="two-column">
-                <div class="chart-container">
-                    <div class="chart-title">场次GMV趋势</div>
+            <div class="two-column" style="margin-bottom:20px;">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">🏆 表现最佳场次</div>
+                    </div>
+                    <div class="card-body">
+                        ${bestSession ? `
+                            <div style="text-align:center;padding:10px 0;">
+                                <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${bestSession.title}</div>
+                                <div style="font-size:32px;font-weight:700;color:var(--secondary-color);margin-bottom:8px;">¥${formatMoney(bestSession.totalGMV)}</div>
+                                <div style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">${bestSession.date} · ${bestSession.host}</div>
+                                <div style="display:flex;justify-content:space-around;">
+                                    <div>
+                                        <div style="font-size:16px;font-weight:600;">${formatNumber(bestSession.totalOrders)}</div>
+                                        <div style="font-size:12px;color:var(--text-secondary);">订单数</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:16px;font-weight:600;">${(bestSession.conversionRate * 100).toFixed(2)}%</div>
+                                        <div style="font-size:12px;color:var(--text-secondary);">转化率</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:16px;font-weight:600;">${formatNumber(bestSession.peakViewers)}</div>
+                                        <div style="font-size:12px;color:var(--text-secondary);">峰值观看</div>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : '<div class="empty-state"><div class="empty-text">暂无数据</div></div>'}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">📉 待提升场次</div>
+                    </div>
+                    <div class="card-body">
+                        ${worstSession && sessions.length > 1 ? `
+                            <div style="text-align:center;padding:10px 0;">
+                                <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${worstSession.title}</div>
+                                <div style="font-size:32px;font-weight:700;color:var(--text-tertiary);margin-bottom:8px;">¥${formatMoney(worstSession.totalGMV)}</div>
+                                <div style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">${worstSession.date} · ${worstSession.host}</div>
+                                <div style="padding:12px;background:rgba(255,165,2,0.08);border-radius:8px;font-size:12px;color:var(--text-secondary);text-align:left;">
+                                    <div style="font-weight:600;color:var(--warning-color);margin-bottom:6px;">💡 提升建议</div>
+                                    <div>• GMV较均值低 ${(((avgGMV - worstSession.totalGMV) / avgGMV * 100)).toFixed(1)}%</div>
+                                    <div>• 建议优化选品策略，增加爆款商品</div>
+                                </div>
+                            </div>
+                        ` : '<div class="empty-state"><div class="empty-text">数据不足</div></div>'}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:20px;">
+                <div class="card-header">
+                    <div class="card-title">场次GMV对比</div>
+                </div>
+                <div class="card-body">
                     ${sessions.length > 0 ? `
-                        <div class="bar-chart" style="height:220px;">
-                            ${sessions.slice().reverse().map(s => `
+                        <div class="bar-chart" style="height:200px;">
+                            ${sortedSessions.map(s => `
                                 <div class="bar-item">
-                                    <div class="bar" style="height:${(s.totalGMV / maxGMV * 100)}%" title="¥${formatMoney(s.totalGMV)}"></div>
+                                    <div class="bar" style="height:${(s.totalGMV / maxGMV * 100)}%" title="${s.title}: ¥${formatMoney(s.totalGMV)}"></div>
                                     <div class="bar-label">${s.date.slice(5)}</div>
                                 </div>
                             `).join('')}
                         </div>
                     ` : '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">暂无数据</div></div>'}
                 </div>
+            </div>
 
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">类目表现对比</div>
-                    </div>
-                    <div class="card-body">
-                        ${categories.length > 0 ? `
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>类目</th>
-                                        <th>GMV</th>
-                                        <th>销量</th>
-                                        <th>场次</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${categories.map(cat => `
+            <div class="card" style="margin-bottom:20px;">
+                <div class="card-header">
+                    <div class="card-title">🏆 最佳商品类目</div>
+                </div>
+                <div class="card-body">
+                    ${categories.length > 0 ? `
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>排名</th>
+                                    <th>类目</th>
+                                    <th>累计GMV</th>
+                                    <th>累计销量</th>
+                                    <th>上播次数</th>
+                                    <th>场均GMV</th>
+                                    <th>表现评级</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${categories.map((cat, i) => {
+                                    const avgGMVPerSession = cat.sessionCount > 0 ? cat.totalGMV / cat.sessionCount : 0;
+                                    let rating = '⭐ 一般';
+                                    let ratingClass = 'badge-default';
+                                    if (i === 0) {
+                                        rating = '⭐⭐⭐ 爆款';
+                                        ratingClass = 'badge-warning';
+                                    } else if (i === 1) {
+                                        rating = '⭐⭐ 潜力';
+                                        ratingClass = 'badge-success';
+                                    } else if (i === 2) {
+                                        rating = '⭐ 良好';
+                                        ratingClass = 'badge-info';
+                                    }
+                                    return `
                                         <tr>
-                                            <td style="font-weight:500;">${cat.categoryName}</td>
+                                            <td>
+                                                <span class="badge ${i < 3 ? 'badge-warning' : 'badge-default'}" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;padding:0;">
+                                                    ${i + 1}
+                                                </span>
+                                            </td>
+                                            <td style="font-weight:600;">${cat.categoryName}</td>
                                             <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(cat.totalGMV)}</td>
                                             <td>${formatNumber(cat.totalSold)}件</td>
-                                            <td>${cat.sessionCount}场</td>
+                                            <td>${cat.sessionCount}次</td>
+                                            <td>¥${formatMoney(avgGMVPerSession)}</td>
+                                            <td><span class="badge ${ratingClass}">${rating}</span></td>
                                         </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        ` : '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">暂无数据</div></div>'}
-                    </div>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    ` : '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">暂无数据</div></div>'}
                 </div>
             </div>
 
-            <div class="card" style="margin-top:20px;">
+            <div class="card">
                 <div class="card-header">
-                    <div class="card-title">直播场次记录</div>
+                    <div class="card-title">📋 场次详细对比</div>
                 </div>
                 <div class="card-body">
                     ${sessions.length > 0 ? `
@@ -1549,84 +2011,139 @@ const App = {
                                     <th>日期</th>
                                     <th>主播</th>
                                     <th>时长</th>
-                                    <th>峰值观看</th>
                                     <th>GMV</th>
                                     <th>订单数</th>
                                     <th>转化率</th>
-                                    <th>操作</th>
+                                    <th>峰值观看</th>
+                                    <th>对比均值</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${sessions.map(s => `
-                                    <tr>
-                                        <td style="font-weight:500;">${s.title}</td>
-                                        <td>${s.date}</td>
-                                        <td>${s.host}</td>
-                                        <td>${s.duration}分钟</td>
-                                        <td>${formatNumber(s.peakViewers)}</td>
-                                        <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(s.totalGMV)}</td>
-                                        <td>${formatNumber(s.totalOrders)}</td>
-                                        <td>
-                                            <span class="badge badge-success">${(s.conversionRate * 100).toFixed(2)}%</span>
-                                        </td>
-                                        <td>
-                                            <button class="action-btn" onclick="App.showSessionDetail('${s.id}')">查看详情</button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
+                                ${sessions.map(s => {
+                                    const gmvDiff = avgGMV > 0 ? ((s.totalGMV - avgGMV) / avgGMV * 100).toFixed(1) : 0;
+                                    const isAboveAvg = s.totalGMV >= avgGMV;
+                                    return `
+                                        <tr>
+                                            <td style="font-weight:500;">${s.title}</td>
+                                            <td>${s.date}</td>
+                                            <td>${s.host}</td>
+                                            <td>${s.duration}分钟</td>
+                                            <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(s.totalGMV)}</td>
+                                            <td>${formatNumber(s.totalOrders)}</td>
+                                            <td>
+                                                <span class="badge badge-success">${(s.conversionRate * 100).toFixed(2)}%</span>
+                                            </td>
+                                            <td>${formatNumber(s.peakViewers)}</td>
+                                            <td>
+                                                <span class="stat-trend ${isAboveAvg ? 'up' : 'down'}" style="display:inline-flex;align-items:center;">
+                                                    ${isAboveAvg ? '↑' : '↓'} ${Math.abs(gmvDiff)}%
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
                             </tbody>
                         </table>
-                    ` : '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">暂无直播记录</div></div>'}
-                </div>
-            </div>
-
-            <div class="card" style="margin-top:20px;">
-                <div class="card-header">
-                    <div class="card-title">商品销售排行榜</div>
-                </div>
-                <div class="card-body">
-                    ${topProducts.length > 0 ? `
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>排名</th>
-                                    <th>商品</th>
-                                    <th>类目</th>
-                                    <th>累计GMV</th>
-                                    <th>累计销量</th>
-                                    <th>上播次数</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${topProducts.map((p, i) => `
-                                    <tr>
-                                        <td>
-                                            <span class="badge ${i < 3 ? 'badge-warning' : 'badge-default'}" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;padding:0;">
-                                                ${i + 1}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div style="display:flex;align-items:center;gap:10px;">
-                                                <span style="font-size:24px;">${p.image}</span>
-                                                <span style="font-size:13px;">${p.productName}</span>
-                                            </div>
-                                        </td>
-                                        <td>${p.category || '-'}</td>
-                                        <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(p.totalGMV)}</td>
-                                        <td>${formatNumber(p.totalSold)}件</td>
-                                        <td>${p.sessionCount}次</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    ` : '<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-text">暂无销售数据</div></div>'}
+                    ` : '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">暂无数据</div></div>'}
                 </div>
             </div>
         `;
     },
 
-    bindReportEvents() {
+    applyCompareFilters() {
+        const categoryFilter = document.getElementById('compareCategoryFilter').value;
+        const hostFilter = document.getElementById('compareHostFilter').value;
+        const startDate = document.getElementById('compareStartDate').value;
+        const endDate = document.getElementById('compareEndDate').value;
+
+        let sessions = DataStore.getSessions().filter(s => s.status === 'completed');
+        let allProducts = DataStore.getProducts();
+
+        if (hostFilter) {
+            sessions = sessions.filter(s => s.host === hostFilter);
+        }
+
+        if (startDate) {
+            sessions = sessions.filter(s => s.date >= startDate);
+        }
+        if (endDate) {
+            sessions = sessions.filter(s => s.date <= endDate);
+        }
+
+        const productMap = {};
+        sessions.forEach(session => {
+            if (session.products) {
+                session.products.forEach(p => {
+                    if (!categoryFilter || allProducts.find(prod => prod.id === p.productId)?.categoryId === categoryFilter) {
+                        if (!productMap[p.productId]) {
+                            productMap[p.productId] = {
+                                productId: p.productId,
+                                productName: p.productName,
+                                image: p.image,
+                                category: '',
+                                categoryId: '',
+                                totalSold: 0,
+                                totalGMV: 0,
+                                sessionCount: 0
+                            };
+                        }
+                        productMap[p.productId].totalSold += p.soldQuantity;
+                        productMap[p.productId].totalGMV += p.gmv;
+                        productMap[p.productId].sessionCount += 1;
+                    }
+                });
+            }
+        });
+
+        if (categoryFilter) {
+            sessions = sessions.filter(s => {
+                return s.products?.some(p => {
+                    const prod = allProducts.find(ap => ap.id === p.productId);
+                    return prod?.categoryId === categoryFilter;
+                });
+            });
+        }
+
+        const topProducts = Object.values(productMap)
+            .sort((a, b) => b.totalGMV - a.totalGMV)
+            .slice(0, 10);
+
+        topProducts.forEach(p => {
+            const prod = allProducts.find(ap => ap.id === p.productId);
+            if (prod) {
+                p.category = prod.category;
+                p.categoryId = prod.categoryId;
+            }
+        });
+
+        const categoriesMap = {};
+        topProducts.forEach(p => {
+            if (!categoriesMap[p.categoryId]) {
+                categoriesMap[p.categoryId] = {
+                    categoryId: p.categoryId,
+                    categoryName: p.category,
+                    totalGMV: 0,
+                    totalSold: 0,
+                    sessionCount: 0
+                };
+            }
+            categoriesMap[p.categoryId].totalGMV += p.totalGMV;
+            categoriesMap[p.categoryId].totalSold += p.totalSold;
+            categoriesMap[p.categoryId].sessionCount = Math.max(categoriesMap[p.categoryId].sessionCount, p.sessionCount);
+        });
+        const categories = Object.values(categoriesMap).sort((a, b) => b.totalGMV - a.totalGMV);
+
+        document.getElementById('compareResults').innerHTML = this.renderCompareResults(sessions, categories, topProducts);
     },
+
+    resetCompareFilters() {
+        document.getElementById('compareCategoryFilter').value = '';
+        document.getElementById('compareHostFilter').value = '';
+        document.getElementById('compareStartDate').value = '';
+        document.getElementById('compareEndDate').value = '';
+        this.applyCompareFilters();
+    },
+
 
     showSessionDetail(sessionId, isNew = false) {
         const session = DataStore.getSessionById(sessionId);
@@ -1701,6 +2218,7 @@ const App = {
                                     <th>直播价</th>
                                     <th>销量</th>
                                     <th>GMV</th>
+                                    <th>观看人数</th>
                                     <th>转化率</th>
                                     <th>库存剩余</th>
                                 </tr>
@@ -1721,6 +2239,7 @@ const App = {
                                             <td>¥${p.livePrice}</td>
                                             <td style="font-weight:600;">${p.soldQuantity}件</td>
                                             <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(p.gmv)}</td>
+                                            <td>${formatNumber(p.viewers || 0)}</td>
                                             <td>
                                                 <span class="badge badge-success">${(p.conversionRate * 100).toFixed(2)}%</span>
                                             </td>
@@ -1802,13 +2321,23 @@ const App = {
                                 ¥${product.livePrice}
                                 <span class="original">¥${product.originalPrice}</span>
                             </div>
-                            <div class="product-meta">
+                            <div class="product-meta" style="margin-bottom:8px;">
                                 <span>库存: ${product.stock}件</span>
                                 <span class="tag tag-primary" style="margin:0;">
                                     ${Math.round((1 - product.livePrice / product.originalPrice) * 100)}%OFF
                                 </span>
                             </div>
-                            <div class="recommend-reason">${product.reason}</div>
+                            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">
+                                <span>📊 历史转化率: <strong style="color:var(--text-primary);">${product.avgConversion}%</strong></span>
+                                <span style="margin-left:10px;">🔥 类目热度: <strong style="color:var(--text-primary);">${product.categoryHeat}%</strong></span>
+                            </div>
+                            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                                ${(product.reason || []).map(r => `
+                                    <span class="tag tag-${r.type === 'conversion' ? 'success' : r.type === 'category' ? 'warning' : r.type === 'stock' ? 'info' : r.type === 'discount' ? 'primary' : 'default'}" style="font-size:11px;padding:2px 8px;">
+                                        ${r.icon} ${r.text}
+                                    </span>
+                                `).join('')}
+                            </div>
                         </div>
                     </div>
                 `).join('')}
@@ -1895,16 +2424,29 @@ const App = {
     },
 
     createPlanFromRecommendation() {
-        const recommended = DataStore.getRecommendedProducts(5);
+        const recommended = DataStore.getRecommendedProducts(6);
         if (recommended.length === 0) {
-            alert('暂无可推荐的商品');
+            alert('暂无可推荐的商品，请先添加商品或完成几场直播积累数据。');
             return;
         }
 
+        const generateScript = (product, order) => {
+            const scripts = [
+                `开场欢迎，介绍今天直播主题，引出${product.name}`,
+                `展示${product.name}外观和核心卖点`,
+                `讲解产品功能和使用场景`,
+                `对比原价${product.originalPrice}元，直播间特价${product.livePrice}元`,
+                `强调库存仅剩${product.stock}件，催促下单`,
+                `解答常见问题，引导加购`
+            ];
+            return scripts.join('\n');
+        };
+
         const products = recommended.map((p, i) => ({
             productId: p.id,
+            productName: p.name,
             order: i + 1,
-            script: ''
+            script: generateScript(p, i + 1)
         }));
 
         const planData = {
@@ -1914,12 +2456,12 @@ const App = {
             duration: 120,
             host: '主播',
             expectedViewers: 10000,
-            description: '由AI选品助手智能推荐的商品组合',
+            description: `由AI选品助手智能推荐的${products.length}个商品组合，按推荐优先级排序讲解，库存充足，转化率预期良好。`,
             products
         };
 
         DataStore.addPlan(planData);
-        alert('已成功生成直播计划！');
+        alert(`已成功生成直播计划！\n\n推荐${products.length}个商品，已按推荐优先级排好讲解顺序。\n\n点击确定跳转到直播计划页面查看详情。`);
         this.renderPage('plans');
     },
 
