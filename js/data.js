@@ -3,18 +3,28 @@ const DataStore = {
         PRODUCTS: 'live_products',
         PLANS: 'live_plans',
         SESSIONS: 'live_sessions',
-        CURRENT_SESSION: 'current_live_session'
+        CURRENT_SESSION: 'current_live_session',
+        DATA_VERSION: 'live_data_version'
     },
+    DATA_VERSION: 'v2.0',
 
     init() {
-        if (!localStorage.getItem(this.STORAGE_KEYS.PRODUCTS)) {
+        const storedVersion = localStorage.getItem(this.STORAGE_KEYS.DATA_VERSION);
+        const needReset = storedVersion !== this.DATA_VERSION;
+        
+        if (needReset || !localStorage.getItem(this.STORAGE_KEYS.PRODUCTS)) {
             localStorage.setItem(this.STORAGE_KEYS.PRODUCTS, JSON.stringify(this.getMockProducts()));
         }
-        if (!localStorage.getItem(this.STORAGE_KEYS.PLANS)) {
+        if (needReset || !localStorage.getItem(this.STORAGE_KEYS.PLANS)) {
             localStorage.setItem(this.STORAGE_KEYS.PLANS, JSON.stringify(this.getMockPlans()));
         }
-        if (!localStorage.getItem(this.STORAGE_KEYS.SESSIONS)) {
+        if (needReset || !localStorage.getItem(this.STORAGE_KEYS.SESSIONS)) {
             localStorage.setItem(this.STORAGE_KEYS.SESSIONS, JSON.stringify(this.getMockSessions()));
+        }
+        
+        if (needReset) {
+            localStorage.removeItem(this.STORAGE_KEYS.CURRENT_SESSION);
+            localStorage.setItem(this.STORAGE_KEYS.DATA_VERSION, this.DATA_VERSION);
         }
     },
 
@@ -256,6 +266,43 @@ const DataStore = {
             return formatDate(nd);
         };
 
+        const session1Products = [
+            { productId: 'p008', productName: '网红零食大礼包整箱装', image: '🍿', order: 1, originalPrice: 168, livePrice: 89, initialStock: 2000, stockWarning: 200, soldQuantity: 1280, endStock: 720, gmv: 113920, viewers: 38000, conversionRate: 1280/38000 },
+            { productId: 'p004', productName: '天然有机护肤套装补水保湿', image: '💄', order: 2, originalPrice: 398, livePrice: 168, initialStock: 1000, stockWarning: 100, soldQuantity: 576, endStock: 424, gmv: 96768, viewers: 28000, conversionRate: 576/28000 },
+            { productId: 'p006', productName: '夏季清凉真丝睡衣套装', image: '👗', order: 3, originalPrice: 599, livePrice: 259, initialStock: 500, stockWarning: 50, soldQuantity: 0, endStock: 500, gmv: 0, viewers: 18000, conversionRate: 0 }
+        ];
+        const session1Totals = {
+            orders: session1Products.reduce((s, p) => s + p.soldQuantity, 0),
+            gmv: session1Products.reduce((s, p) => s + p.gmv, 0)
+        };
+
+        const session2Products = [
+            { productId: 'p001', productName: '高端无线蓝牙耳机 Pro Max', image: '�', order: 1, originalPrice: 599, livePrice: 299, initialStock: 500, stockWarning: 50, soldQuantity: 420, endStock: 80, gmv: 125580, viewers: 45000, conversionRate: 420/45000 },
+            { productId: 'p003', productName: '智能运动手表多功能运动监测', image: '⌚', order: 2, originalPrice: 1299, livePrice: 699, initialStock: 300, stockWarning: 30, soldQuantity: 280, endStock: 20, gmv: 195720, viewers: 38000, conversionRate: 280/38000 },
+            { productId: 'p010', productName: '空气炸锅家用多功能无油', image: '🍗', order: 3, originalPrice: 599, livePrice: 289, initialStock: 250, stockWarning: 25, soldQuantity: 180, endStock: 70, gmv: 52020, viewers: 25000, conversionRate: 180/25000 },
+            { productId: 'p009', productName: '进口特级初榨橄榄油礼盒装', image: '🫒', order: 4, originalPrice: 299, livePrice: 159, initialStock: 1000, stockWarning: 100, soldQuantity: 980, endStock: 20, gmv: 155820, viewers: 32000, conversionRate: 980/32000 }
+        ];
+        const session2Totals = {
+            orders: session2Products.reduce((s, p) => s + p.soldQuantity, 0),
+            gmv: session2Products.reduce((s, p) => s + p.gmv, 0)
+        };
+
+        const session3Products = [
+            { productId: 'p002', productName: '轻奢真皮女款时尚手提包单肩斜挎包', image: '👜', order: 1, originalPrice: 899, livePrice: 459, initialStock: 200, stockWarning: 20, soldQuantity: 185, endStock: 15, gmv: 84915, viewers: 35000, conversionRate: 185/35000 },
+            { productId: 'p005', productName: '高端商务休闲男鞋透气运动鞋', image: '👟', order: 2, originalPrice: 499, livePrice: 199, initialStock: 800, stockWarning: 80, soldQuantity: 720, endStock: 80, gmv: 143280, viewers: 32000, conversionRate: 720/32000 },
+            { productId: 'p007', productName: '儿童益智早教机器人故事机', image: '🤖', order: 3, originalPrice: 459, livePrice: 259, initialStock: 400, stockWarning: 40, soldQuantity: 320, endStock: 80, gmv: 82880, viewers: 20000, conversionRate: 320/20000 },
+            { productId: 'p004', productName: '天然有机护肤套装补水保湿', image: '💄', order: 4, originalPrice: 398, livePrice: 168, initialStock: 800, stockWarning: 80, soldQuantity: 680, endStock: 120, gmv: 114240, viewers: 28000, conversionRate: 680/28000 },
+            { productId: 'p008', productName: '网红零食大礼包整箱装', image: '�', order: 5, originalPrice: 168, livePrice: 89, initialStock: 1500, stockWarning: 150, soldQuantity: 1420, endStock: 80, gmv: 126380, viewers: 35000, conversionRate: 1420/35000 }
+        ];
+        const session3Totals = {
+            orders: session3Products.reduce((s, p) => s + p.soldQuantity, 0),
+            gmv: session3Products.reduce((s, p) => s + p.gmv, 0)
+        };
+
+        const session1TotalViewers = 45600;
+        const session2TotalViewers = 62000;
+        const session3TotalViewers = 48000;
+
         return [
             {
                 id: 'session001',
@@ -267,43 +314,12 @@ const DataStore = {
                 duration: 120,
                 host: '吃货小王',
                 peakViewers: 12800,
-                totalViewers: 45600,
-                totalOrders: 1856,
-                totalGMV: 285600,
+                totalViewers: session1TotalViewers,
+                totalOrders: session1Totals.orders,
+                totalGMV: session1Totals.gmv,
                 avgWatchTime: 18.5,
-                conversionRate: 0.041,
-                products: [
-                    {
-                        productId: 'p008',
-                        productName: '网红零食大礼包整箱装',
-                        image: '🍿',
-                        order: 1,
-                        originalPrice: 168,
-                        livePrice: 89,
-                        initialStock: 2000,
-                        soldQuantity: 1280,
-                        endStock: 720,
-                        gmv: 113920,
-                        viewers: 38000,
-                        conversionRate: 0.0337,
-                        avgStayTime: 240
-                    },
-                    {
-                        productId: 'p004',
-                        productName: '天然有机护肤套装补水保湿',
-                        image: '💄',
-                        order: 2,
-                        originalPrice: 398,
-                        livePrice: 168,
-                        initialStock: 1000,
-                        soldQuantity: 576,
-                        endStock: 424,
-                        gmv: 96768,
-                        viewers: 28000,
-                        conversionRate: 0.0206,
-                        avgStayTime: 180
-                    }
-                ],
+                conversionRate: session1Totals.orders / session1TotalViewers,
+                products: session1Products,
                 status: 'completed'
             },
             {
@@ -316,58 +332,12 @@ const DataStore = {
                 duration: 180,
                 host: '科技达人阿杰',
                 peakViewers: 18500,
-                totalViewers: 62000,
-                totalOrders: 2340,
-                totalGMV: 528000,
+                totalViewers: session2TotalViewers,
+                totalOrders: session2Totals.orders,
+                totalGMV: session2Totals.gmv,
                 avgWatchTime: 22.3,
-                conversionRate: 0.0377,
-                products: [
-                    {
-                        productId: 'p001',
-                        productName: '高端无线蓝牙耳机 Pro Max',
-                        image: '🎧',
-                        order: 1,
-                        originalPrice: 599,
-                        livePrice: 299,
-                        initialStock: 500,
-                        soldQuantity: 420,
-                        endStock: 80,
-                        gmv: 125580,
-                        viewers: 45000,
-                        conversionRate: 0.0093,
-                        avgStayTime: 320
-                    },
-                    {
-                        productId: 'p003',
-                        productName: '智能运动手表多功能运动监测',
-                        image: '⌚',
-                        order: 2,
-                        originalPrice: 1299,
-                        livePrice: 699,
-                        initialStock: 300,
-                        soldQuantity: 280,
-                        endStock: 20,
-                        gmv: 195720,
-                        viewers: 38000,
-                        conversionRate: 0.0074,
-                        avgStayTime: 280
-                    },
-                    {
-                        productId: 'p010',
-                        productName: '空气炸锅家用多功能无油',
-                        image: '🍗',
-                        order: 3,
-                        originalPrice: 599,
-                        livePrice: 289,
-                        initialStock: 250,
-                        soldQuantity: 180,
-                        endStock: 70,
-                        gmv: 52020,
-                        viewers: 25000,
-                        conversionRate: 0.0072,
-                        avgStayTime: 200
-                    }
-                ],
+                conversionRate: session2Totals.orders / session2TotalViewers,
+                products: session2Products,
                 status: 'completed'
             },
             {
@@ -380,58 +350,12 @@ const DataStore = {
                 duration: 150,
                 host: '时尚博主Luna',
                 peakViewers: 15200,
-                totalViewers: 48000,
-                totalOrders: 2100,
-                totalGMV: 612000,
+                totalViewers: session3TotalViewers,
+                totalOrders: session3Totals.orders,
+                totalGMV: session3Totals.gmv,
                 avgWatchTime: 19.8,
-                conversionRate: 0.0438,
-                products: [
-                    {
-                        productId: 'p002',
-                        productName: '轻奢真皮女款时尚手提包单肩斜挎包',
-                        image: '👜',
-                        order: 1,
-                        originalPrice: 899,
-                        livePrice: 459,
-                        initialStock: 200,
-                        soldQuantity: 185,
-                        endStock: 15,
-                        gmv: 84915,
-                        viewers: 35000,
-                        conversionRate: 0.0053,
-                        avgStayTime: 360
-                    },
-                    {
-                        productId: 'p005',
-                        productName: '高端商务休闲男鞋透气运动鞋',
-                        image: '👟',
-                        order: 2,
-                        originalPrice: 499,
-                        livePrice: 199,
-                        initialStock: 800,
-                        soldQuantity: 720,
-                        endStock: 80,
-                        gmv: 143280,
-                        viewers: 32000,
-                        conversionRate: 0.0225,
-                        avgStayTime: 220
-                    },
-                    {
-                        productId: 'p007',
-                        productName: '儿童益智早教机器人故事机',
-                        image: '🤖',
-                        order: 3,
-                        originalPrice: 459,
-                        livePrice: 259,
-                        initialStock: 400,
-                        soldQuantity: 320,
-                        endStock: 80,
-                        gmv: 82880,
-                        viewers: 20000,
-                        conversionRate: 0.016,
-                        avgStayTime: 150
-                    }
-                ],
+                conversionRate: session3Totals.orders / session3TotalViewers,
+                products: session3Products,
                 status: 'completed'
             }
         ];
@@ -511,6 +435,75 @@ const DataStore = {
         const plans = this.getPlans();
         const filtered = plans.filter(p => p.id !== id);
         localStorage.setItem(this.STORAGE_KEYS.PLANS, JSON.stringify(filtered));
+    },
+
+    getCalendarEvents(startDate, endDate) {
+        const plans = this.getPlans();
+        const sessions = this.getSessions();
+        const events = [];
+
+        plans.forEach(plan => {
+            if (plan.date >= startDate && plan.date <= endDate) {
+                let status = 'upcoming';
+                const today = new Date().toISOString().split('T')[0];
+                if (plan.status === 'completed' || plan.date < today) {
+                    status = 'completed';
+                } else if (plan.date === today) {
+                    status = 'today';
+                }
+                events.push({
+                    id: 'plan_' + plan.id,
+                    type: 'plan',
+                    typeId: plan.id,
+                    title: plan.title,
+                    date: plan.date,
+                    startTime: plan.startTime,
+                    status,
+                    productCount: (plan.products || []).length,
+                    host: plan.host,
+                    planData: plan
+                });
+            }
+        });
+
+        sessions.forEach(session => {
+            if (session.date >= startDate && session.date <= endDate) {
+                events.push({
+                    id: 'session_' + session.id,
+                    type: 'session',
+                    typeId: session.id,
+                    title: session.title,
+                    date: session.date,
+                    startTime: session.startTime ? session.startTime.split('T')[1]?.slice(0, 5) : '19:00',
+                    status: session.status === 'live' ? 'live' : 'completed',
+                    productCount: (session.products || []).length,
+                    host: session.host,
+                    totalGMV: session.totalGMV,
+                    totalOrders: session.totalOrders,
+                    sessionData: session
+                });
+            }
+        });
+
+        const currentSession = this.getCurrentSession();
+        if (currentSession && currentSession.date >= startDate && currentSession.date <= endDate) {
+            events.push({
+                id: 'current_' + currentSession.id,
+                type: 'session',
+                typeId: currentSession.id,
+                title: currentSession.title,
+                date: currentSession.date,
+                startTime: currentSession.startTime ? currentSession.startTime.split('T')[1]?.slice(0, 5) : '19:00',
+                status: 'live',
+                productCount: (currentSession.products || []).length,
+                host: currentSession.host,
+                totalGMV: currentSession.totalGMV,
+                totalOrders: currentSession.totalOrders,
+                sessionData: currentSession
+            });
+        }
+
+        return events.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
     },
 
     getSessions() {
@@ -766,6 +759,53 @@ const DataStore = {
         }
         
         return reasons;
+    },
+
+    getProductPerformanceHistory(productId) {
+        const sessions = this.getSessions().filter(s => s.status === 'completed');
+        const product = this.getProductById(productId);
+        const history = [];
+
+        sessions.forEach(session => {
+            const sp = session.products?.find(p => p.productId === productId);
+            if (sp) {
+                history.push({
+                    sessionId: session.id,
+                    sessionTitle: session.title,
+                    date: session.date,
+                    host: session.host,
+                    soldQuantity: sp.soldQuantity,
+                    gmv: sp.gmv,
+                    initialStock: sp.initialStock || (sp.endStock + sp.soldQuantity),
+                    endStock: sp.endStock,
+                    viewers: sp.viewers || 0,
+                    conversionRate: sp.conversionRate || (sp.viewers > 0 ? sp.soldQuantity / sp.viewers : 0),
+                    stockUsedRate: (sp.initialStock || (sp.endStock + sp.soldQuantity)) > 0 
+                        ? sp.soldQuantity / (sp.initialStock || (sp.endStock + sp.soldQuantity)) 
+                        : 0
+                });
+            }
+        });
+
+        history.sort((a, b) => a.date.localeCompare(b.date));
+
+        const summary = {
+            totalSessions: history.length,
+            totalSold: history.reduce((s, h) => s + h.soldQuantity, 0),
+            totalGMV: history.reduce((s, h) => s + h.gmv, 0),
+            avgConversion: history.length > 0 
+                ? history.reduce((s, h) => s + h.conversionRate, 0) / history.length 
+                : 0,
+            avgStockUsed: history.length > 0 
+                ? history.reduce((s, h) => s + h.stockUsedRate, 0) / history.length 
+                : 0
+        };
+
+        return {
+            product,
+            history,
+            summary
+        };
     },
 
     getRecentSessions(limit = 5) {

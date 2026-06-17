@@ -235,6 +235,15 @@ const App = {
     },
 
     renderPlans() {
+        if (!this.calendarState) {
+            const today = new Date();
+            this.calendarState = {
+                view: 'list',
+                currentDate: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+                selectedDate: null
+            };
+        }
+
         const plans = DataStore.getPlans();
         const products = DataStore.getProducts();
 
@@ -254,8 +263,14 @@ const App = {
 
         return `
             <div class="page-header">
-                <div style="display:flex;gap:12px;align-items:center;">
-                    <div class="tabs" style="margin-bottom:0;border-bottom:none;">
+                <div style="display:flex;gap:16px;align-items:center;">
+                    <div class="tabs" style="margin-bottom:0;border-bottom:none;" id="planViewTabs">
+                        <div class="tab-item ${this.calendarState.view === 'list' ? 'active' : ''}" 
+                             onclick="App.switchPlanView('list')">📋 列表视图</div>
+                        <div class="tab-item ${this.calendarState.view === 'calendar' ? 'active' : ''}" 
+                             onclick="App.switchPlanView('calendar')">📅 日历视图</div>
+                    </div>
+                    <div class="tabs" style="margin-bottom:0;border-bottom:none;" id="planStatusTabs">
                         <div class="tab-item active" data-tab="all">全部计划</div>
                         <div class="tab-item" data-tab="upcoming">待开播</div>
                         <div class="tab-item" data-tab="completed">已结束</div>
@@ -266,47 +281,297 @@ const App = {
                 </button>
             </div>
 
-            <div id="plansList">
-                ${plans.length > 0 ? plans.map(plan => `
-                    <div class="plan-card" onclick="App.showPlanDetail('${plan.id}')">
-                        <div class="plan-header">
-                            <div class="plan-title">${plan.title}</div>
-                            ${getStatusBadge(plan.status, plan.date)}
+            ${this.calendarState.view === 'list' ? `
+                <div id="plansList">
+                    ${plans.length > 0 ? plans.map(plan => `
+                        <div class="plan-card" onclick="App.showPlanDetail('${plan.id}')">
+                            <div class="plan-header">
+                                <div class="plan-title">${plan.title}</div>
+                                ${getStatusBadge(plan.status, plan.date)}
+                            </div>
+                            <div class="plan-meta">
+                                <span>📅 ${plan.date} ${plan.startTime}</span>
+                                <span>⏱️ ${plan.duration}分钟</span>
+                                <span>🎤 ${plan.host}</span>
+                                <span>🛍️ ${formatProducts(plan.products)}</span>
+                                <span>👥 预计${plan.expectedViewers?.toLocaleString() || 0}人观看</span>
+                            </div>
+                            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">
+                                ${plan.description || '暂无描述'}
+                            </div>
+                            <div class="plan-products">
+                                ${(plan.products || []).slice(0, 5).map(p => {
+                                    const prod = products.find(pr => pr.id === p.productId);
+                                    return prod ? `
+                                        <span class="plan-product-tag">
+                                            <span>${prod.image}</span>
+                                            <span>${prod.name.substring(0, 10)}...</span>
+                                        </span>
+                                    ` : '';
+                                }).join('')}
+                                ${(plan.products || []).length > 5 ? 
+                                    `<span class="plan-product-tag">+${(plan.products.length - 5)}个</span>` : ''}
+                            </div>
                         </div>
-                        <div class="plan-meta">
-                            <span>📅 ${plan.date} ${plan.startTime}</span>
-                            <span>⏱️ ${plan.duration}分钟</span>
-                            <span>🎤 ${plan.host}</span>
-                            <span>🛍️ ${formatProducts(plan.products)}</span>
-                            <span>👥 预计${plan.expectedViewers?.toLocaleString() || 0}人观看</span>
+                    `).join('') : `
+                        <div class="empty-state">
+                            <div class="empty-icon">📅</div>
+                            <div class="empty-text">暂无直播计划</div>
+                            <div class="empty-hint">创建你的第一场直播计划吧</div>
+                            <button class="btn btn-primary" onclick="App.showPlanModal()">创建直播计划</button>
                         </div>
-                        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">
-                            ${plan.description || '暂无描述'}
+                    `}
+                </div>
+            ` : `
+                ${this.renderCalendarView()}
+            `}
+        `;
+    },
+
+    switchPlanView(view) {
+        if (!this.calendarState) {
+            const today = new Date();
+            this.calendarState = {
+                view: 'list',
+                currentDate: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+                selectedDate: null
+            };
+        }
+        this.calendarState.view = view;
+        this.calendarState.selectedDate = null;
+        this.renderPage('plans');
+    },
+
+    renderCalendarView() {
+        const state = this.calendarState;
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        const year = state.currentDate.getFullYear();
+        const month = state.currentDate.getMonth();
+        
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const startDay = firstDay.getDay();
+        const daysInMonth = lastDay.getDate();
+        
+        const calStart = new Date(year, month, 1 - startDay);
+        const calEnd = new Date(year, month, daysInMonth + (42 - daysInMonth - startDay));
+        
+        const calStartStr = calStart.toISOString().split('T')[0];
+        const calEndStr = calEnd.toISOString().split('T')[0];
+        const events = DataStore.getCalendarEvents(calStartStr, calEndStr);
+        
+        const eventsByDate = {};
+        events.forEach(evt => {
+            if (!eventsByDate[evt.date]) eventsByDate[evt.date] = [];
+            eventsByDate[evt.date].push(evt);
+        });
+
+        const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+        const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+        
+        const getStatusColor = (status) => {
+            switch(status) {
+                case 'live': return 'background:var(--primary-color);color:#fff;';
+                case 'today': return 'background:var(--warning-color);color:#fff;';
+                case 'completed': return 'background:var(--text-secondary);opacity:0.6;color:#fff;';
+                default: return 'background:var(--secondary-color);color:#fff;';
+            }
+        };
+
+        let calendarCells = '';
+        for (let week = 0; week < 6; week++) {
+            for (let day = 0; day < 7; day++) {
+                const cellDate = new Date(calStart.getTime() + (week * 7 + day) * 86400000);
+                const dateStr = cellDate.toISOString().split('T')[0];
+                const isCurrentMonth = cellDate.getMonth() === month;
+                const isToday = dateStr === todayStr;
+                const isSelected = state.selectedDate === dateStr;
+                const dayEvents = eventsByDate[dateStr] || [];
+                
+                let eventBadges = '';
+                if (dayEvents.length > 0) {
+                    const displayEvents = dayEvents.slice(0, 3);
+                    eventBadges = displayEvents.map(evt => `
+                        <div class="calendar-event" 
+                             style="${getStatusColor(evt.status)}"
+                             onclick="event.stopPropagation();App.handleCalendarEventClick('${evt.type}','${evt.typeId}')">
+                            ${evt.startTime} ${evt.title.substring(0, 8)}
                         </div>
-                        <div class="plan-products">
-                            ${(plan.products || []).slice(0, 5).map(p => {
-                                const prod = products.find(pr => pr.id === p.productId);
-                                return prod ? `
-                                    <span class="plan-product-tag">
-                                        <span>${prod.image}</span>
-                                        <span>${prod.name.substring(0, 10)}...</span>
-                                    </span>
-                                ` : '';
-                            }).join('')}
-                            ${(plan.products || []).length > 5 ? 
-                                `<span class="plan-product-tag">+${(plan.products.length - 5)}个</span>` : ''}
+                    `).join('');
+                    if (dayEvents.length > 3) {
+                        eventBadges += `<div class="calendar-event" style="background:var(--bg-tertiary);color:var(--text-secondary);">+${dayEvents.length - 3}场</div>`;
+                    }
+                }
+
+                calendarCells += `
+                    <div class="calendar-cell ${!isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}"
+                         onclick="App.selectCalendarDate('${dateStr}')">
+                        <div class="calendar-day-header">
+                            <span class="calendar-day-number ${isToday ? 'today-number' : ''}">${cellDate.getDate()}</span>
+                            ${dayEvents.length > 0 ? `<span class="calendar-event-count">${dayEvents.length}</span>` : ''}
                         </div>
+                        <div class="calendar-events">${eventBadges}</div>
                     </div>
-                `).join('') : `
-                    <div class="empty-state">
-                        <div class="empty-icon">📅</div>
-                        <div class="empty-text">暂无直播计划</div>
-                        <div class="empty-hint">创建你的第一场直播计划吧</div>
-                        <button class="btn btn-primary" onclick="App.showPlanModal()">创建直播计划</button>
+                `;
+            }
+        }
+
+        return `
+            <div class="calendar-container">
+                <div class="calendar-toolbar">
+                    <div class="calendar-nav">
+                        <button class="btn btn-sm btn-default" onclick="App.prevMonth()">←</button>
+                        <button class="btn btn-sm btn-default" onclick="App.goToday()">今天</button>
+                        <button class="btn btn-sm btn-default" onclick="App.nextMonth()">→</button>
+                        <span class="calendar-title">${year}年 ${monthNames[month]}</span>
                     </div>
-                `}
+                    <div class="calendar-legend">
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--secondary-color);"></span>待开播</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--warning-color);"></span>今日</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--primary-color);"></span>直播中</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--text-secondary);opacity:0.6;"></span>已结束</span>
+                    </div>
+                </div>
+
+                <div class="calendar-weekdays">
+                    ${weekDays.map(d => `<div class="calendar-weekday">${d}</div>`).join('')}
+                </div>
+                <div class="calendar-grid">${calendarCells}</div>
+            </div>
+
+            ${state.selectedDate ? this.renderSelectedDateDetail(state.selectedDate) : `
+                <div class="card" style="margin-top:20px;">
+                    <div class="card-body" style="text-align:center;padding:40px;color:var(--text-secondary);">
+                        👆 点击日历中的日期，查看当天的直播安排和商品清单
+                    </div>
+                </div>
+            `}
+        `;
+    },
+
+    prevMonth() {
+        this.calendarState.currentDate = new Date(
+            this.calendarState.currentDate.getFullYear(),
+            this.calendarState.currentDate.getMonth() - 1,
+            1
+        );
+        this.renderPage('plans');
+    },
+
+    nextMonth() {
+        this.calendarState.currentDate = new Date(
+            this.calendarState.currentDate.getFullYear(),
+            this.calendarState.currentDate.getMonth() + 1,
+            1
+        );
+        this.renderPage('plans');
+    },
+
+    goToday() {
+        this.calendarState.currentDate = new Date();
+        this.renderPage('plans');
+    },
+
+    selectCalendarDate(dateStr) {
+        this.calendarState.selectedDate = this.calendarState.selectedDate === dateStr ? null : dateStr;
+        this.renderPage('plans');
+    },
+
+    renderSelectedDateDetail(dateStr) {
+        const startOfDay = dateStr;
+        const endOfDay = dateStr;
+        const events = DataStore.getCalendarEvents(startOfDay, endOfDay);
+        const products = DataStore.getProducts();
+
+        const formatMoney = (num) => {
+            if (num >= 10000) return (num / 10000).toFixed(2) + '万';
+            return num.toLocaleString();
+        };
+
+        const getStatusLabel = (evt) => {
+            switch(evt.status) {
+                case 'live': return '<span class="badge badge-danger">🔴 直播中</span>';
+                case 'today': return '<span class="badge badge-warning">🕐 待开播</span>';
+                case 'completed': return '<span class="badge badge-default">✅ 已结束</span>';
+                default: return '<span class="badge badge-success">📅 待开播</span>';
+            }
+        };
+
+        return `
+            <div class="card" style="margin-top:20px;">
+                <div class="card-header">
+                    <div class="card-title">📅 ${dateStr} 直播安排 (${events.length}场)</div>
+                    <button class="btn btn-sm btn-default" onclick="App.selectCalendarDate(null)">✕ 关闭</button>
+                </div>
+                <div class="card-body">
+                    ${events.length > 0 ? events.map(evt => `
+                        <div class="plan-card" style="margin-bottom:16px;">
+                            <div class="plan-header">
+                                <div>
+                                    <div class="plan-title">${evt.startTime} ${evt.title}</div>
+                                    <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">
+                                        🎤 ${evt.host} · 🛍️ ${evt.productCount}个商品
+                                        ${evt.totalGMV !== undefined ? ` · 💰 ¥${formatMoney(evt.totalGMV)}` : ''}
+                                    </div>
+                                </div>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    ${getStatusLabel(evt)}
+                                    ${evt.type === 'plan' && evt.status !== 'completed' ? `
+                                        <button class="btn btn-primary btn-sm" 
+                                                onclick="event.stopPropagation();App.startLiveFromPlan('${evt.typeId}')">▶ 开播</button>
+                                    ` : ''}
+                                    ${evt.type === 'session' && evt.status === 'live' ? `
+                                        <button class="btn btn-danger btn-sm" 
+                                                onclick="event.stopPropagation();App.renderPage('live')">📺 进入中控</button>
+                                    ` : ''}
+                                    ${evt.type === 'session' && evt.status === 'completed' ? `
+                                        <button class="btn btn-default btn-sm" 
+                                                onclick="event.stopPropagation();App.showSessionDetail('${evt.typeId}')">📊 复盘报告</button>
+                                    ` : ''}
+                                    ${evt.type === 'plan' ? `
+                                        <button class="btn btn-default btn-sm" 
+                                                onclick="event.stopPropagation();App.showPlanDetail('${evt.typeId}')">查看详情</button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            <div style="margin-top:12px;">
+                                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">商品清单：</div>
+                                <div class="plan-products">
+                                    ${(evt.type === 'plan' ? (evt.planData?.products || []) : (evt.sessionData?.products || [])).map(p => {
+                                        const prod = products.find(pr => pr.id === p.productId);
+                                        if (prod) {
+                                            return `
+                                                <span class="plan-product-tag">
+                                                    <span>${prod.image}</span>
+                                                    <span>${prod.name.substring(0, 12)}</span>
+                                                </span>
+                                            `;
+                                        } else if (p.productName) {
+                                            return `<span class="plan-product-tag">${p.productName.substring(0, 14)}</span>`;
+                                        }
+                                        return '';
+                                    }).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('') : `
+                        <div class="empty-state">
+                            <div class="empty-icon">📭</div>
+                            <div class="empty-text">当天没有直播安排</div>
+                        </div>
+                    `}
+                </div>
             </div>
         `;
+    },
+
+    handleCalendarEventClick(type, typeId) {
+        if (type === 'plan') {
+            this.showPlanDetail(typeId);
+        } else {
+            this.showSessionDetail(typeId);
+        }
     },
 
     bindPlanEvents() {
@@ -1366,19 +1631,30 @@ const App = {
         }
 
         const currentProductHeader = document.querySelector('.current-product-header');
-        if (currentProductHeader) {
-            let scriptBox = document.querySelector('.current-script-box');
-            if (currentProduct.script) {
-                if (!scriptBox) {
-                    scriptBox = document.createElement('div');
-                    scriptBox.className = 'current-script-box';
-                    scriptBox.style.cssText = 'padding:12px;background:var(--bg-primary);border-radius:8px;font-size:13px;color:var(--text-secondary);margin-top:12px;';
-                    const detailEl = document.querySelector('.current-product-detail');
-                    if (detailEl) detailEl.appendChild(scriptBox);
-                }
-                scriptBox.innerHTML = `<strong style="color:var(--text-primary);">📝 串讲要点：</strong>${currentProduct.script}`;
-            } else if (scriptBox) {
-                scriptBox.remove();
+        const detailEl = document.querySelector('.current-product-detail');
+        if (detailEl) {
+            let scriptBox = detailEl.querySelector('.current-script-box');
+            let emptyBox = detailEl.querySelector('.empty-script');
+            
+            if (scriptBox) scriptBox.remove();
+            if (emptyBox) emptyBox.remove();
+            
+            if (currentProduct.script && currentProduct.script.trim()) {
+                scriptBox = document.createElement('div');
+                scriptBox.className = 'current-script-box';
+                scriptBox.style.cssText = 'padding:12px;background:var(--bg-primary);border-radius:8px;font-size:13px;color:var(--text-secondary);margin-top:12px;line-height:1.7;';
+                const formattedScript = currentProduct.script.split('\n').map(line => line.trim()).filter(Boolean).join('<br>');
+                scriptBox.innerHTML = `<strong style="color:var(--text-primary);">📝 串讲要点：</strong><br>${formattedScript}`;
+                detailEl.appendChild(scriptBox);
+            } else {
+                emptyBox = document.createElement('div');
+                emptyBox.className = 'empty-script';
+                emptyBox.innerHTML = `
+                    <span class="empty-script-icon">📝</span>
+                    <strong style="display:block;margin-bottom:4px;">暂无串讲脚本</strong>
+                    <span style="font-size:12px;">可以先即兴讲解，或在直播计划中添加脚本</span>
+                `;
+                detailEl.appendChild(emptyBox);
             }
         }
 
@@ -1818,7 +2094,7 @@ const App = {
         document.getElementById('reportCompare').style.display = tab === 'compare' ? 'block' : 'none';
     },
 
-    renderCompareResults(sessions, categories, topProducts) {
+    renderCompareResults(sessions, categories, topProducts, filterInfo = null) {
         const formatMoney = (num) => {
             if (num >= 10000) {
                 return (num / 10000).toFixed(1) + '万';
@@ -1833,16 +2109,31 @@ const App = {
             return num.toLocaleString();
         };
 
-        const sortedSessions = [...sessions].sort((a, b) => b.totalGMV - a.totalGMV);
+        const sortedSessions = [...sessions].sort((a, b) => (b.displayGMV || b.totalGMV) - (a.displayGMV || a.totalGMV));
         const bestSession = sortedSessions[0];
         const worstSession = sortedSessions[sortedSessions.length - 1];
 
-        const avgGMV = sessions.length > 0 ? sessions.reduce((s, x) => s + x.totalGMV, 0) / sessions.length : 0;
-        const avgConversion = sessions.length > 0 ? sessions.reduce((s, x) => s + x.conversionRate, 0) / sessions.length : 0;
+        const totalGMV = sessions.reduce((s, x) => s + (x.displayGMV || x.totalGMV), 0);
+        const totalOrders = sessions.reduce((s, x) => s + (x.displayOrders || x.totalOrders), 0);
+        const avgGMV = sessions.length > 0 ? totalGMV / sessions.length : 0;
+        const avgConversion = sessions.length > 0 
+            ? sessions.reduce((s, x) => s + (x.displayRate || x.conversionRate), 0) / sessions.length 
+            : 0;
 
-        const maxGMV = sessions.length > 0 ? Math.max(...sessions.map(s => s.totalGMV)) : 1;
+        const maxGMV = sessions.length > 0 ? Math.max(...sessions.map(s => s.displayGMV || s.totalGMV)) : 1;
 
         return `
+            ${filterInfo ? `
+                <div class="filter-hint">
+                    📊 <strong>当前筛选：</strong>
+                    按类目「${filterInfo.categoryName}」统计，以下数据仅包含该类目商品的贡献
+                    ${filterInfo.host ? ` · 主播：${filterInfo.host}` : ''}
+                    ${filterInfo.dateRange ? ` · 日期：${filterInfo.dateRange}` : ''}
+                    <button class="btn btn-sm btn-default" style="margin-left:12px;padding:2px 8px;font-size:12px;" 
+                            onclick="App.resetCompareFilters()">清除筛选</button>
+                </div>
+            ` : ''}
+
             <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
                 <div class="stat-card">
                     <div class="stat-header">
@@ -1856,14 +2147,14 @@ const App = {
                         <div class="stat-icon red">💰</div>
                     </div>
                     <div class="stat-value" style="font-size:20px;">¥${formatMoney(avgGMV)}</div>
-                    <div class="stat-label">场均GMV</div>
+                    <div class="stat-label">场均GMV${filterInfo ? '（筛选类目）' : ''}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-header">
                         <div class="stat-icon blue">📈</div>
                     </div>
                     <div class="stat-value" style="font-size:20px;">${(avgConversion * 100).toFixed(2)}%</div>
-                    <div class="stat-label">平均转化率</div>
+                    <div class="stat-label">平均转化率${filterInfo ? '（筛选类目）' : ''}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-header">
@@ -1877,22 +2168,22 @@ const App = {
             <div class="two-column" style="margin-bottom:20px;">
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">🏆 表现最佳场次</div>
+                        <div class="card-title">🏆 表现最佳场次${filterInfo ? '（按筛选类目GMV）' : ''}</div>
                     </div>
                     <div class="card-body">
                         ${bestSession ? `
                             <div style="text-align:center;padding:10px 0;">
                                 <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${bestSession.title}</div>
-                                <div style="font-size:32px;font-weight:700;color:var(--secondary-color);margin-bottom:8px;">¥${formatMoney(bestSession.totalGMV)}</div>
+                                <div style="font-size:32px;font-weight:700;color:var(--secondary-color);margin-bottom:8px;">¥${formatMoney(bestSession.displayGMV || bestSession.totalGMV)}</div>
                                 <div style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">${bestSession.date} · ${bestSession.host}</div>
                                 <div style="display:flex;justify-content:space-around;">
                                     <div>
-                                        <div style="font-size:16px;font-weight:600;">${formatNumber(bestSession.totalOrders)}</div>
-                                        <div style="font-size:12px;color:var(--text-secondary);">订单数</div>
+                                        <div style="font-size:16px;font-weight:600;">${formatNumber(bestSession.displayOrders || bestSession.totalOrders)}</div>
+                                        <div style="font-size:12px;color:var(--text-secondary);">订单数${filterInfo ? '*' : ''}</div>
                                     </div>
                                     <div>
-                                        <div style="font-size:16px;font-weight:600;">${(bestSession.conversionRate * 100).toFixed(2)}%</div>
-                                        <div style="font-size:12px;color:var(--text-secondary);">转化率</div>
+                                        <div style="font-size:16px;font-weight:600;">${((bestSession.displayRate || bestSession.conversionRate) * 100).toFixed(2)}%</div>
+                                        <div style="font-size:12px;color:var(--text-secondary);">转化率${filterInfo ? '*' : ''}</div>
                                     </div>
                                     <div>
                                         <div style="font-size:16px;font-weight:600;">${formatNumber(bestSession.peakViewers)}</div>
@@ -1906,18 +2197,18 @@ const App = {
 
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">📉 待提升场次</div>
+                        <div class="card-title">📉 待提升场次${filterInfo ? '（按筛选类目GMV）' : ''}</div>
                     </div>
                     <div class="card-body">
                         ${worstSession && sessions.length > 1 ? `
                             <div style="text-align:center;padding:10px 0;">
                                 <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${worstSession.title}</div>
-                                <div style="font-size:32px;font-weight:700;color:var(--text-tertiary);margin-bottom:8px;">¥${formatMoney(worstSession.totalGMV)}</div>
+                                <div style="font-size:32px;font-weight:700;color:var(--text-tertiary);margin-bottom:8px;">¥${formatMoney(worstSession.displayGMV || worstSession.totalGMV)}</div>
                                 <div style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">${worstSession.date} · ${worstSession.host}</div>
                                 <div style="padding:12px;background:rgba(255,165,2,0.08);border-radius:8px;font-size:12px;color:var(--text-secondary);text-align:left;">
                                     <div style="font-weight:600;color:var(--warning-color);margin-bottom:6px;">💡 提升建议</div>
-                                    <div>• GMV较均值低 ${(((avgGMV - worstSession.totalGMV) / avgGMV * 100)).toFixed(1)}%</div>
-                                    <div>• 建议优化选品策略，增加爆款商品</div>
+                                    <div>• GMV较均值低 ${(((avgGMV - (worstSession.displayGMV || worstSession.totalGMV)) / avgGMV * 100)).toFixed(1)}%</div>
+                                    <div>• 建议优化${filterInfo ? `「${filterInfo.categoryName}」类目的` : '选品'}策略，增加爆款商品</div>
                                 </div>
                             </div>
                         ` : '<div class="empty-state"><div class="empty-text">数据不足</div></div>'}
@@ -1927,18 +2218,20 @@ const App = {
 
             <div class="card" style="margin-bottom:20px;">
                 <div class="card-header">
-                    <div class="card-title">场次GMV对比</div>
+                    <div class="card-title">场次GMV对比${filterInfo ? '（筛选类目贡献）' : ''}</div>
                 </div>
                 <div class="card-body">
                     ${sessions.length > 0 ? `
                         <div class="bar-chart" style="height:200px;">
                             ${sortedSessions.map(s => `
                                 <div class="bar-item">
-                                    <div class="bar" style="height:${(s.totalGMV / maxGMV * 100)}%" title="${s.title}: ¥${formatMoney(s.totalGMV)}"></div>
+                                    <div class="bar" style="height:${((s.displayGMV || s.totalGMV) / maxGMV * 100)}%" 
+                                         title="${s.title}: ¥${formatMoney(s.displayGMV || s.totalGMV)}${filterInfo ? '（仅筛选类目）' : ''}"></div>
                                     <div class="bar-label">${s.date.slice(5)}</div>
                                 </div>
                             `).join('')}
                         </div>
+                        ${filterInfo ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:10px;text-align:right;">* 柱状图高度仅反映筛选类目商品的GMV贡献，非整场GMV</div>` : ''}
                     ` : '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">暂无数据</div></div>'}
                 </div>
             </div>
@@ -2020,18 +2313,21 @@ const App = {
                             </thead>
                             <tbody>
                                 ${sessions.map(s => {
-                                    const gmvDiff = avgGMV > 0 ? ((s.totalGMV - avgGMV) / avgGMV * 100).toFixed(1) : 0;
-                                    const isAboveAvg = s.totalGMV >= avgGMV;
+                                    const sGMV = s.displayGMV || s.totalGMV;
+                                    const sOrders = s.displayOrders || s.totalOrders;
+                                    const sRate = s.displayRate || s.conversionRate;
+                                    const gmvDiff = avgGMV > 0 ? ((sGMV - avgGMV) / avgGMV * 100).toFixed(1) : 0;
+                                    const isAboveAvg = sGMV >= avgGMV;
                                     return `
-                                        <tr>
+                                        <tr style="cursor:pointer;" onclick="App.showSessionDetail('${s.id}')">
                                             <td style="font-weight:500;">${s.title}</td>
                                             <td>${s.date}</td>
                                             <td>${s.host}</td>
                                             <td>${s.duration}分钟</td>
-                                            <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(s.totalGMV)}</td>
-                                            <td>${formatNumber(s.totalOrders)}</td>
+                                            <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(sGMV)}${filterInfo ? '<span style="font-size:11px;color:var(--text-secondary);">*</span>' : ''}</td>
+                                            <td>${formatNumber(sOrders)}${filterInfo ? '<span style="font-size:11px;color:var(--text-secondary);">*</span>' : ''}</td>
                                             <td>
-                                                <span class="badge badge-success">${(s.conversionRate * 100).toFixed(2)}%</span>
+                                                <span class="badge badge-success">${(sRate * 100).toFixed(2)}%</span>
                                             </td>
                                             <td>${formatNumber(s.peakViewers)}</td>
                                             <td>
@@ -2058,6 +2354,7 @@ const App = {
 
         let sessions = DataStore.getSessions().filter(s => s.status === 'completed');
         let allProducts = DataStore.getProducts();
+        const allSessions = sessions;
 
         if (hostFilter) {
             sessions = sessions.filter(s => s.host === hostFilter);
@@ -2070,39 +2367,61 @@ const App = {
             sessions = sessions.filter(s => s.date <= endDate);
         }
 
-        const productMap = {};
-        sessions.forEach(session => {
-            if (session.products) {
-                session.products.forEach(p => {
-                    if (!categoryFilter || allProducts.find(prod => prod.id === p.productId)?.categoryId === categoryFilter) {
-                        if (!productMap[p.productId]) {
-                            productMap[p.productId] = {
-                                productId: p.productId,
-                                productName: p.productName,
-                                image: p.image,
-                                category: '',
-                                categoryId: '',
-                                totalSold: 0,
-                                totalGMV: 0,
-                                sessionCount: 0
-                            };
-                        }
-                        productMap[p.productId].totalSold += p.soldQuantity;
-                        productMap[p.productId].totalGMV += p.gmv;
-                        productMap[p.productId].sessionCount += 1;
-                    }
-                });
-            }
-        });
-
-        if (categoryFilter) {
-            sessions = sessions.filter(s => {
-                return s.products?.some(p => {
+        const sessionsWithFilter = sessions.map(session => {
+            let filteredProducts = (session.products || []).slice();
+            if (categoryFilter) {
+                filteredProducts = filteredProducts.filter(p => {
                     const prod = allProducts.find(ap => ap.id === p.productId);
                     return prod?.categoryId === categoryFilter;
                 });
+            }
+            
+            const filteredGMV = filteredProducts.reduce((s, p) => s + (p.gmv || 0), 0);
+            const filteredOrders = filteredProducts.reduce((s, p) => s + (p.soldQuantity || 0), 0);
+            const filteredViewers = filteredProducts.reduce((s, p) => s + (p.viewers || 0), 0);
+            const filteredRate = filteredViewers > 0 ? filteredOrders / filteredViewers : 0;
+            
+            const productsToCount = categoryFilter ? filteredProducts : (session.products || []);
+            const hasMatchingProducts = productsToCount.length > 0;
+            
+            if (!hasMatchingProducts && categoryFilter) return null;
+
+            return {
+                ...session,
+                filteredProducts,
+                filteredGMV,
+                filteredOrders,
+                filteredViewers,
+                filteredRate: categoryFilter ? filteredRate : session.conversionRate,
+                displayGMV: categoryFilter ? filteredGMV : session.totalGMV,
+                displayOrders: categoryFilter ? filteredOrders : session.totalOrders,
+                displayViewers: categoryFilter ? filteredViewers : session.totalViewers,
+                displayRate: categoryFilter ? filteredRate : session.conversionRate
+            };
+        }).filter(Boolean);
+
+        sessions = sessionsWithFilter;
+
+        const productMap = {};
+        sessions.forEach(session => {
+            session.filteredProducts.forEach(p => {
+                if (!productMap[p.productId]) {
+                    productMap[p.productId] = {
+                        productId: p.productId,
+                        productName: p.productName,
+                        image: p.image,
+                        category: '',
+                        categoryId: '',
+                        totalSold: 0,
+                        totalGMV: 0,
+                        sessionCount: 0
+                    };
+                }
+                productMap[p.productId].totalSold += p.soldQuantity;
+                productMap[p.productId].totalGMV += p.gmv;
+                productMap[p.productId].sessionCount += 1;
             });
-        }
+        });
 
         const topProducts = Object.values(productMap)
             .sort((a, b) => b.totalGMV - a.totalGMV)
@@ -2133,7 +2452,17 @@ const App = {
         });
         const categories = Object.values(categoriesMap).sort((a, b) => b.totalGMV - a.totalGMV);
 
-        document.getElementById('compareResults').innerHTML = this.renderCompareResults(sessions, categories, topProducts);
+        let filterInfo = null;
+        if (categoryFilter) {
+            const catName = allProducts.find(p => p.categoryId === categoryFilter)?.category || '';
+            filterInfo = {
+                categoryName: catName,
+                host: hostFilter,
+                dateRange: startDate || endDate ? `${startDate || '不限'} 至 ${endDate || '不限'}` : null
+            };
+        }
+
+        document.getElementById('compareResults').innerHTML = this.renderCompareResults(sessions, categories, topProducts, filterInfo);
     },
 
     resetCompareFilters() {
@@ -2226,14 +2555,19 @@ const App = {
                             <tbody>
                                 ${products.map((p, i) => {
                                     const soldOut = p.endStock <= 0;
-                                    const lowStock = p.endStock <= p.initialStock * 0.2;
+                                    const lowStock = p.endStock <= (p.initialStock || (p.endStock + p.soldQuantity)) * 0.2;
                                     return `
                                         <tr>
                                             <td>${i + 1}</td>
                                             <td>
                                                 <div style="display:flex;align-items:center;gap:10px;">
                                                     <span style="font-size:24px;">${p.image}</span>
-                                                    <span style="font-size:13px;">${p.productName}</span>
+                                                    <span style="font-size:13px;">
+                                                        <a href="javascript:void(0)" onclick="App.showProductHistory('${p.productId}')" 
+                                                           style="color:var(--primary-color);text-decoration:none;font-weight:500;">
+                                                            ${p.productName}
+                                                        </a>
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td>¥${p.livePrice}</td>
@@ -2273,6 +2607,159 @@ const App = {
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="App.closeModal()">关闭</button>
                 <button class="btn btn-primary" onclick="App.closeModal();App.renderPage('assistant');">用选品助手规划下场</button>
+            </div>
+        `, 'modal-lg');
+    },
+
+    showProductHistory(productId) {
+        const data = DataStore.getProductPerformanceHistory(productId);
+        if (!data.product) {
+            alert('商品信息不存在');
+            return;
+        }
+
+        const formatMoney = (num) => {
+            if (num >= 10000) return (num / 10000).toFixed(2) + '万';
+            return num.toLocaleString();
+        };
+
+        const formatNumber = (num) => {
+            if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+            return num.toLocaleString();
+        };
+
+        const { product, history, summary } = data;
+        const maxSold = history.length > 0 ? Math.max(...history.map(h => h.soldQuantity)) : 1;
+        const maxGMV = history.length > 0 ? Math.max(...history.map(h => h.gmv)) : 1;
+
+        let recommendation = '';
+        if (summary.totalSessions === 0) {
+            recommendation = '<div style="padding:16px;background:rgba(55,66,250,0.08);border-radius:8px;"><strong style="color:var(--info-color);">💡 评估建议：</strong>该商品尚无直播记录，建议先小范围测试，观察转化率后再决定是否长期上播。</div>';
+        } else {
+            const goodConv = summary.avgConversion >= 0.05;
+            const goodStock = summary.avgStockUsed >= 0.5;
+            if (goodConv && goodStock) {
+                recommendation = '<div style="padding:16px;background:rgba(46,213,115,0.08);border-radius:8px;"><strong style="color:var(--secondary-color);">✅ 表现优秀：</strong>历史转化率高，库存消耗好，建议作为核心商品持续上播。</div>';
+            } else if (goodConv || goodStock) {
+                recommendation = '<div style="padding:16px;background:rgba(255,165,2,0.08);border-radius:8px;"><strong style="color:var(--warning-color);">⚠️ 观察优化：</strong>部分指标表现良好，建议优化讲解策略或调整定价后继续测试。</div>';
+            } else {
+                recommendation = '<div style="padding:16px;background:rgba(255,71,87,0.08);border-radius:8px;"><strong style="color:var(--primary-color);">❌ 建议淘汰：</strong>转化率和库存消耗均不佳，建议更换商品或大幅调整定价/卖点。</div>';
+            }
+        }
+
+        this.showModal(`
+            <div class="modal-header">
+                <div class="modal-title">📊 商品表现详情 - ${product.name}</div>
+                <button class="modal-close" onclick="App.closeModal()">✕</button>
+            </div>
+            <div class="modal-body product-detail-modal">
+                <div style="display:flex;gap:20px;margin-bottom:24px;align-items:center;">
+                    <div style="font-size:64px;">${product.image}</div>
+                    <div style="flex:1;">
+                        <div style="font-size:20px;font-weight:600;margin-bottom:8px;">${product.name}</div>
+                        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--text-secondary);">
+                            <span>📂 ${product.category}</span>
+                            <span>💰 直播价 ¥${product.livePrice} <s style="opacity:0.6;">¥${product.originalPrice}</s></span>
+                            <span>📦 当前库存 ${product.stock}件</span>
+                            <span>🔥 累计销售额 ¥${formatMoney(product.totalSales)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px;">
+                    <div class="stat-card" style="padding:14px;">
+                        <div class="stat-value" style="font-size:18px;">${summary.totalSessions}</div>
+                        <div class="stat-label">上播场次</div>
+                    </div>
+                    <div class="stat-card" style="padding:14px;">
+                        <div class="stat-value" style="font-size:18px;">${summary.totalSold}件</div>
+                        <div class="stat-label">累计销量</div>
+                    </div>
+                    <div class="stat-card" style="padding:14px;">
+                        <div class="stat-value" style="font-size:18px;">¥${formatMoney(summary.totalGMV)}</div>
+                        <div class="stat-label">累计GMV</div>
+                    </div>
+                    <div class="stat-card" style="padding:14px;">
+                        <div class="stat-value" style="font-size:18px;">${(summary.avgConversion * 100).toFixed(2)}%</div>
+                        <div class="stat-label">平均转化率</div>
+                    </div>
+                    <div class="stat-card" style="padding:14px;">
+                        <div class="stat-value" style="font-size:18px;">${(summary.avgStockUsed * 100).toFixed(1)}%</div>
+                        <div class="stat-label">库存消耗率</div>
+                    </div>
+                </div>
+
+                ${recommendation}
+
+                <div style="margin-top:24px;">
+                    <div style="font-weight:600;margin-bottom:12px;">各场次表现趋势</div>
+                    ${history.length > 0 ? `
+                        <div style="margin-bottom:24px;">
+                            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">📦 销量趋势</div>
+                            <div class="bar-chart">
+                                ${history.map(h => `
+                                    <div class="bar-item">
+                                        <div class="bar" style="height:${(h.soldQuantity / maxSold * 100)}%;background:linear-gradient(to top, var(--primary-color), var(--warning-color));" 
+                                             title="${h.date}: ${h.soldQuantity}件"></div>
+                                        <div class="bar-label">${h.date.slice(5)}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>场次日期</th>
+                                    <th>场次名称</th>
+                                    <th>主播</th>
+                                    <th>销量</th>
+                                    <th>GMV</th>
+                                    <th>观看</th>
+                                    <th>转化率</th>
+                                    <th>库存消耗</th>
+                                    <th>剩余</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${history.map((h, i) => {
+                                    const prevSold = i > 0 ? history[i - 1].soldQuantity : h.soldQuantity;
+                                    const diff = h.soldQuantity - prevSold;
+                                    const trend = prevSold > 0 
+                                        ? (diff > 0 ? `<span class="trend-up">↑${((diff / prevSold) * 100).toFixed(0)}%</span>` 
+                                                   : diff < 0 ? `<span class="trend-down">↓${((Math.abs(diff) / prevSold) * 100).toFixed(0)}%</span>` : '')
+                                        : '';
+                                    return `
+                                        <tr style="cursor:pointer;" onclick="App.closeModal();App.showSessionDetail('${h.sessionId}')">
+                                            <td>${h.date}</td>
+                                            <td style="font-size:13px;">${h.sessionTitle.slice(0, 12)}</td>
+                                            <td>${h.host}</td>
+                                            <td style="font-weight:600;">${h.soldQuantity}件 ${trend}</td>
+                                            <td style="color:var(--primary-color);font-weight:600;">¥${formatMoney(h.gmv)}</td>
+                                            <td>${formatNumber(h.viewers)}</td>
+                                            <td><span class="badge badge-success">${(h.conversionRate * 100).toFixed(2)}%</span></td>
+                                            <td>
+                                                <div style="display:flex;align-items:center;gap:6px;">
+                                                    <div style="width:60px;height:6px;background:var(--bg-tertiary);border-radius:3px;">
+                                                        <div style="width:${Math.min(h.stockUsedRate * 100, 100)}%;height:100%;background:${h.stockUsedRate > 0.7 ? 'var(--secondary-color)' : h.stockUsedRate > 0.4 ? 'var(--warning-color)' : 'var(--primary-color)'};border-radius:3px;"></div>
+                                                    </div>
+                                                    <span style="font-size:12px;">${(h.stockUsedRate * 100).toFixed(0)}%</span>
+                                                </div>
+                                            </td>
+                                            <td>${h.endStock}件</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    ` : `
+                        <div class="empty-state">
+                            <div class="empty-icon">📭</div>
+                            <div class="empty-text">该商品暂无直播记录</div>
+                            <div class="empty-hint">建议先安排1-2场上播测试数据表现</div>
+                        </div>
+                    `}
+                </div>
             </div>
         `, 'modal-lg');
     },
