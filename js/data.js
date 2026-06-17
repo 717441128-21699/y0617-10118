@@ -6,7 +6,7 @@ const DataStore = {
         CURRENT_SESSION: 'current_live_session',
         DATA_VERSION: 'live_data_version'
     },
-    DATA_VERSION: 'v2.0',
+    DATA_VERSION: 'v2.1',
 
     init() {
         const storedVersion = localStorage.getItem(this.STORAGE_KEYS.DATA_VERSION);
@@ -269,7 +269,7 @@ const DataStore = {
         const session1Products = [
             { productId: 'p008', productName: '网红零食大礼包整箱装', image: '🍿', order: 1, originalPrice: 168, livePrice: 89, initialStock: 2000, stockWarning: 200, soldQuantity: 1280, endStock: 720, gmv: 113920, viewers: 38000, conversionRate: 1280/38000 },
             { productId: 'p004', productName: '天然有机护肤套装补水保湿', image: '💄', order: 2, originalPrice: 398, livePrice: 168, initialStock: 1000, stockWarning: 100, soldQuantity: 576, endStock: 424, gmv: 96768, viewers: 28000, conversionRate: 576/28000 },
-            { productId: 'p006', productName: '夏季清凉真丝睡衣套装', image: '👗', order: 3, originalPrice: 599, livePrice: 259, initialStock: 500, stockWarning: 50, soldQuantity: 0, endStock: 500, gmv: 0, viewers: 18000, conversionRate: 0 }
+            { productId: 'p006', productName: '家用多功能破壁机多功能料理机', image: '🍳', order: 3, originalPrice: 799, livePrice: 399, initialStock: 500, stockWarning: 50, soldQuantity: 0, endStock: 500, gmv: 0, viewers: 18000, conversionRate: 0 }
         ];
         const session1Totals = {
             orders: session1Products.reduce((s, p) => s + p.soldQuantity, 0),
@@ -277,10 +277,10 @@ const DataStore = {
         };
 
         const session2Products = [
-            { productId: 'p001', productName: '高端无线蓝牙耳机 Pro Max', image: '�', order: 1, originalPrice: 599, livePrice: 299, initialStock: 500, stockWarning: 50, soldQuantity: 420, endStock: 80, gmv: 125580, viewers: 45000, conversionRate: 420/45000 },
+            { productId: 'p001', productName: '高端无线蓝牙耳机 Pro Max', image: '🎧', order: 1, originalPrice: 599, livePrice: 299, initialStock: 500, stockWarning: 50, soldQuantity: 420, endStock: 80, gmv: 125580, viewers: 45000, conversionRate: 420/45000 },
             { productId: 'p003', productName: '智能运动手表多功能运动监测', image: '⌚', order: 2, originalPrice: 1299, livePrice: 699, initialStock: 300, stockWarning: 30, soldQuantity: 280, endStock: 20, gmv: 195720, viewers: 38000, conversionRate: 280/38000 },
-            { productId: 'p010', productName: '空气炸锅家用多功能无油', image: '🍗', order: 3, originalPrice: 599, livePrice: 289, initialStock: 250, stockWarning: 25, soldQuantity: 180, endStock: 70, gmv: 52020, viewers: 25000, conversionRate: 180/25000 },
-            { productId: 'p009', productName: '进口特级初榨橄榄油礼盒装', image: '🫒', order: 4, originalPrice: 299, livePrice: 159, initialStock: 1000, stockWarning: 100, soldQuantity: 980, endStock: 20, gmv: 155820, viewers: 32000, conversionRate: 980/32000 }
+            { productId: 'p010', productName: '空气炸锅家用多功能无油', image: '🍗', order: 3, originalPrice: 599, livePrice: 289, initialStock: 250, stockWarning: 30, soldQuantity: 180, endStock: 70, gmv: 52020, viewers: 25000, conversionRate: 180/25000 },
+            { productId: 'p009', productName: '男士护肤套装控油祛痘', image: '🧴', order: 4, originalPrice: 358, livePrice: 158, initialStock: 1000, stockWarning: 60, soldQuantity: 980, endStock: 20, gmv: 154840, viewers: 32000, conversionRate: 980/32000 }
         ];
         const session2Totals = {
             orders: session2Products.reduce((s, p) => s + p.soldQuantity, 0),
@@ -292,7 +292,7 @@ const DataStore = {
             { productId: 'p005', productName: '高端商务休闲男鞋透气运动鞋', image: '👟', order: 2, originalPrice: 499, livePrice: 199, initialStock: 800, stockWarning: 80, soldQuantity: 720, endStock: 80, gmv: 143280, viewers: 32000, conversionRate: 720/32000 },
             { productId: 'p007', productName: '儿童益智早教机器人故事机', image: '🤖', order: 3, originalPrice: 459, livePrice: 259, initialStock: 400, stockWarning: 40, soldQuantity: 320, endStock: 80, gmv: 82880, viewers: 20000, conversionRate: 320/20000 },
             { productId: 'p004', productName: '天然有机护肤套装补水保湿', image: '💄', order: 4, originalPrice: 398, livePrice: 168, initialStock: 800, stockWarning: 80, soldQuantity: 680, endStock: 120, gmv: 114240, viewers: 28000, conversionRate: 680/28000 },
-            { productId: 'p008', productName: '网红零食大礼包整箱装', image: '�', order: 5, originalPrice: 168, livePrice: 89, initialStock: 1500, stockWarning: 150, soldQuantity: 1420, endStock: 80, gmv: 126380, viewers: 35000, conversionRate: 1420/35000 }
+            { productId: 'p008', productName: '网红零食大礼包整箱装', image: '🍿', order: 5, originalPrice: 168, livePrice: 89, initialStock: 1500, stockWarning: 150, soldQuantity: 1420, endStock: 80, gmv: 126380, viewers: 35000, conversionRate: 1420/35000 }
         ];
         const session3Totals = {
             orders: session3Products.reduce((s, p) => s + p.soldQuantity, 0),

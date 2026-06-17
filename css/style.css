@@ -1399,6 +1399,16 @@ body {
     margin-top: 12px;
 }
 
+.calendar-cell.week-cell {
+    min-height: 220px;
+}
+
+.calendar-cell.week-cell .calendar-event {
+    font-size: 12px;
+    padding: 4px 8px;
+    line-height: 1.5;
+}
+
 .empty-script-icon {
     font-size: 28px;
     margin-bottom: 8px;

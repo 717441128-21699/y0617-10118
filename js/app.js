@@ -239,6 +239,7 @@ const App = {
             const today = new Date();
             this.calendarState = {
                 view: 'list',
+                calView: 'month',
                 currentDate: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
                 selectedDate: null
             };
@@ -333,6 +334,7 @@ const App = {
             const today = new Date();
             this.calendarState = {
                 view: 'list',
+                calView: 'month',
                 currentDate: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
                 selectedDate: null
             };
@@ -348,14 +350,24 @@ const App = {
         const todayStr = today.toISOString().split('T')[0];
         const year = state.currentDate.getFullYear();
         const month = state.currentDate.getMonth();
+        const date = state.currentDate.getDate();
+        const isWeekView = state.calView === 'week';
         
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const startDay = firstDay.getDay();
-        const daysInMonth = lastDay.getDate();
+        let calStart, calEnd, totalCells;
         
-        const calStart = new Date(year, month, 1 - startDay);
-        const calEnd = new Date(year, month, daysInMonth + (42 - daysInMonth - startDay));
+        if (isWeekView) {
+            const dayOfWeek = state.currentDate.getDay();
+            calStart = new Date(year, month, date - dayOfWeek);
+            calEnd = new Date(year, month, date - dayOfWeek + 6);
+            totalCells = 7;
+        } else {
+            const firstDay = new Date(year, month, 1);
+            const startDay = firstDay.getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            calStart = new Date(year, month, 1 - startDay);
+            calEnd = new Date(year, month, daysInMonth + (42 - daysInMonth - startDay));
+            totalCells = 42;
+        }
         
         const calStartStr = calStart.toISOString().split('T')[0];
         const calEndStr = calEnd.toISOString().split('T')[0];
@@ -379,10 +391,13 @@ const App = {
             }
         };
 
+        const weeksToShow = isWeekView ? 1 : 6;
         let calendarCells = '';
-        for (let week = 0; week < 6; week++) {
+        for (let week = 0; week < weeksToShow; week++) {
             for (let day = 0; day < 7; day++) {
-                const cellDate = new Date(calStart.getTime() + (week * 7 + day) * 86400000);
+                const cellIndex = week * 7 + day;
+                if (cellIndex >= totalCells) break;
+                const cellDate = new Date(calStart.getTime() + cellIndex * 86400000);
                 const dateStr = cellDate.toISOString().split('T')[0];
                 const isCurrentMonth = cellDate.getMonth() === month;
                 const isToday = dateStr === todayStr;
@@ -391,24 +406,25 @@ const App = {
                 
                 let eventBadges = '';
                 if (dayEvents.length > 0) {
-                    const displayEvents = dayEvents.slice(0, 3);
+                    const maxDisplay = isWeekView ? 5 : 3;
+                    const displayEvents = dayEvents.slice(0, maxDisplay);
                     eventBadges = displayEvents.map(evt => `
                         <div class="calendar-event" 
                              style="${getStatusColor(evt.status)}"
                              onclick="event.stopPropagation();App.handleCalendarEventClick('${evt.type}','${evt.typeId}')">
-                            ${evt.startTime} ${evt.title.substring(0, 8)}
+                            ${evt.startTime} ${evt.title.substring(0, isWeekView ? 12 : 8)}
                         </div>
                     `).join('');
-                    if (dayEvents.length > 3) {
-                        eventBadges += `<div class="calendar-event" style="background:var(--bg-tertiary);color:var(--text-secondary);">+${dayEvents.length - 3}场</div>`;
+                    if (dayEvents.length > maxDisplay) {
+                        eventBadges += `<div class="calendar-event" style="background:var(--bg-tertiary);color:var(--text-secondary);">+${dayEvents.length - maxDisplay}场</div>`;
                     }
                 }
 
                 calendarCells += `
-                    <div class="calendar-cell ${!isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}"
+                    <div class="calendar-cell ${!isCurrentMonth && !isWeekView ? 'other-month' : ''} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${isWeekView ? 'week-cell' : ''}"
                          onclick="App.selectCalendarDate('${dateStr}')">
                         <div class="calendar-day-header">
-                            <span class="calendar-day-number ${isToday ? 'today-number' : ''}">${cellDate.getDate()}</span>
+                            <span class="calendar-day-number ${isToday ? 'today-number' : ''}">${isWeekView ? `${cellDate.getMonth() + 1}/${cellDate.getDate()}` : cellDate.getDate()}</span>
                             ${dayEvents.length > 0 ? `<span class="calendar-event-count">${dayEvents.length}</span>` : ''}
                         </div>
                         <div class="calendar-events">${eventBadges}</div>
@@ -417,20 +433,37 @@ const App = {
             }
         }
 
+        let navTitle = '';
+        if (isWeekView) {
+            const ws = calStart;
+            const we = calEnd;
+            navTitle = `${ws.getMonth() + 1}/${ws.getDate()} - ${we.getMonth() + 1}/${we.getDate()}`;
+        } else {
+            navTitle = `${year}年 ${monthNames[month]}`;
+        }
+
         return `
             <div class="calendar-container">
                 <div class="calendar-toolbar">
                     <div class="calendar-nav">
-                        <button class="btn btn-sm btn-default" onclick="App.prevMonth()">←</button>
+                        <button class="btn btn-sm btn-default" onclick="App.calPrev()">←</button>
                         <button class="btn btn-sm btn-default" onclick="App.goToday()">今天</button>
-                        <button class="btn btn-sm btn-default" onclick="App.nextMonth()">→</button>
-                        <span class="calendar-title">${year}年 ${monthNames[month]}</span>
+                        <button class="btn btn-sm btn-default" onclick="App.calNext()">→</button>
+                        <span class="calendar-title">${navTitle}</span>
                     </div>
-                    <div class="calendar-legend">
-                        <span class="legend-item"><span class="legend-dot" style="background:var(--secondary-color);"></span>待开播</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:var(--warning-color);"></span>今日</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:var(--primary-color);"></span>直播中</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:var(--text-secondary);opacity:0.6;"></span>已结束</span>
+                    <div style="display:flex;gap:12px;align-items:center;">
+                        <div class="tabs" style="margin-bottom:0;border-bottom:none;">
+                            <div class="tab-item ${state.calView === 'month' ? 'active' : ''}" 
+                                 onclick="App.switchCalView('month')" style="padding:4px 12px;font-size:13px;">月</div>
+                            <div class="tab-item ${state.calView === 'week' ? 'active' : ''}" 
+                                 onclick="App.switchCalView('week')" style="padding:4px 12px;font-size:13px;">周</div>
+                        </div>
+                        <div class="calendar-legend">
+                            <span class="legend-item"><span class="legend-dot" style="background:var(--secondary-color);"></span>待开播</span>
+                            <span class="legend-item"><span class="legend-dot" style="background:var(--warning-color);"></span>今日</span>
+                            <span class="legend-item"><span class="legend-dot" style="background:var(--primary-color);"></span>直播中</span>
+                            <span class="legend-item"><span class="legend-dot" style="background:var(--text-secondary);opacity:0.6;"></span>已结束</span>
+                        </div>
                     </div>
                 </div>
 
@@ -450,26 +483,51 @@ const App = {
         `;
     },
 
-    prevMonth() {
-        this.calendarState.currentDate = new Date(
-            this.calendarState.currentDate.getFullYear(),
-            this.calendarState.currentDate.getMonth() - 1,
-            1
-        );
+    switchCalView(calView) {
+        this.calendarState.calView = calView;
+        this.calendarState.selectedDate = null;
         this.renderPage('plans');
     },
 
-    nextMonth() {
-        this.calendarState.currentDate = new Date(
-            this.calendarState.currentDate.getFullYear(),
-            this.calendarState.currentDate.getMonth() + 1,
-            1
-        );
+    calPrev() {
+        if (this.calendarState.calView === 'week') {
+            this.calendarState.currentDate = new Date(
+                this.calendarState.currentDate.getFullYear(),
+                this.calendarState.currentDate.getMonth(),
+                this.calendarState.currentDate.getDate() - 7
+            );
+        } else {
+            this.calendarState.currentDate = new Date(
+                this.calendarState.currentDate.getFullYear(),
+                this.calendarState.currentDate.getMonth() - 1,
+                1
+            );
+        }
+        this.calendarState.selectedDate = null;
+        this.renderPage('plans');
+    },
+
+    calNext() {
+        if (this.calendarState.calView === 'week') {
+            this.calendarState.currentDate = new Date(
+                this.calendarState.currentDate.getFullYear(),
+                this.calendarState.currentDate.getMonth(),
+                this.calendarState.currentDate.getDate() + 7
+            );
+        } else {
+            this.calendarState.currentDate = new Date(
+                this.calendarState.currentDate.getFullYear(),
+                this.calendarState.currentDate.getMonth() + 1,
+                1
+            );
+        }
+        this.calendarState.selectedDate = null;
         this.renderPage('plans');
     },
 
     goToday() {
         this.calendarState.currentDate = new Date();
+        this.calendarState.selectedDate = null;
         this.renderPage('plans');
     },
 
@@ -1312,11 +1370,17 @@ const App = {
                                     <span class="original-price">¥${currentProduct.originalPrice}</span>
                                     <span class="discount-tag">${Math.round((1 - currentProduct.livePrice / currentProduct.originalPrice) * 100)}% OFF</span>
                                 </div>
-                                ${currentProduct.script ? `
-                                    <div style="padding:12px;background:var(--bg-primary);border-radius:8px;font-size:13px;color:var(--text-secondary);">
-                                        <strong style="color:var(--text-primary);">📝 串讲要点：</strong>${currentProduct.script}
+                                ${currentProduct.script && currentProduct.script.trim() ? `
+                                    <div class="current-script-box" style="padding:12px;background:var(--bg-primary);border-radius:8px;font-size:13px;color:var(--text-secondary);margin-top:12px;line-height:1.7;">
+                                        <strong style="color:var(--text-primary);">📝 串讲要点：</strong><br>${currentProduct.script.split('\n').map(line => line.trim()).filter(Boolean).join('<br>')}
                                     </div>
-                                ` : ''}
+                                ` : `
+                                    <div class="empty-script" style="margin-top:12px;">
+                                        <span class="empty-script-icon">📝</span>
+                                        <strong style="display:block;margin-bottom:4px;">暂无串讲脚本</strong>
+                                        <span style="font-size:12px;">可以先即兴讲解，或在直播计划中添加脚本</span>
+                                    </div>
+                                `}
                             </div>
                         </div>
 
@@ -2109,18 +2173,26 @@ const App = {
             return num.toLocaleString();
         };
 
-        const sortedSessions = [...sessions].sort((a, b) => (b.displayGMV || b.totalGMV) - (a.displayGMV || a.totalGMV));
+        sessions = sessions.map(s => ({
+            ...s,
+            dGMV: s.displayGMV !== undefined ? s.displayGMV : s.totalGMV,
+            dOrders: s.displayOrders !== undefined ? s.displayOrders : s.totalOrders,
+            dViewers: s.displayViewers !== undefined ? s.displayViewers : s.totalViewers,
+            dRate: s.displayRate !== undefined ? s.displayRate : s.conversionRate
+        }));
+
+        const sortedSessions = [...sessions].sort((a, b) => b.dGMV - a.dGMV);
         const bestSession = sortedSessions[0];
         const worstSession = sortedSessions[sortedSessions.length - 1];
 
-        const totalGMV = sessions.reduce((s, x) => s + (x.displayGMV || x.totalGMV), 0);
-        const totalOrders = sessions.reduce((s, x) => s + (x.displayOrders || x.totalOrders), 0);
+        const totalGMV = sessions.reduce((s, x) => s + x.dGMV, 0);
+        const totalOrders = sessions.reduce((s, x) => s + x.dOrders, 0);
         const avgGMV = sessions.length > 0 ? totalGMV / sessions.length : 0;
         const avgConversion = sessions.length > 0 
-            ? sessions.reduce((s, x) => s + (x.displayRate || x.conversionRate), 0) / sessions.length 
+            ? sessions.reduce((s, x) => s + x.dRate, 0) / sessions.length 
             : 0;
 
-        const maxGMV = sessions.length > 0 ? Math.max(...sessions.map(s => s.displayGMV || s.totalGMV)) : 1;
+        const maxGMV = sessions.length > 0 ? Math.max(...sessions.map(s => s.dGMV), 1) : 1;
 
         return `
             ${filterInfo ? `
@@ -2174,15 +2246,15 @@ const App = {
                         ${bestSession ? `
                             <div style="text-align:center;padding:10px 0;">
                                 <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${bestSession.title}</div>
-                                <div style="font-size:32px;font-weight:700;color:var(--secondary-color);margin-bottom:8px;">¥${formatMoney(bestSession.displayGMV || bestSession.totalGMV)}</div>
+                                <div style="font-size:32px;font-weight:700;color:var(--secondary-color);margin-bottom:8px;">¥${formatMoney(bestSession.dGMV)}</div>
                                 <div style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">${bestSession.date} · ${bestSession.host}</div>
                                 <div style="display:flex;justify-content:space-around;">
                                     <div>
-                                        <div style="font-size:16px;font-weight:600;">${formatNumber(bestSession.displayOrders || bestSession.totalOrders)}</div>
+                                        <div style="font-size:16px;font-weight:600;">${formatNumber(bestSession.dOrders)}</div>
                                         <div style="font-size:12px;color:var(--text-secondary);">订单数${filterInfo ? '*' : ''}</div>
                                     </div>
                                     <div>
-                                        <div style="font-size:16px;font-weight:600;">${((bestSession.displayRate || bestSession.conversionRate) * 100).toFixed(2)}%</div>
+                                        <div style="font-size:16px;font-weight:600;">${(bestSession.dRate * 100).toFixed(2)}%</div>
                                         <div style="font-size:12px;color:var(--text-secondary);">转化率${filterInfo ? '*' : ''}</div>
                                     </div>
                                     <div>
@@ -2203,11 +2275,11 @@ const App = {
                         ${worstSession && sessions.length > 1 ? `
                             <div style="text-align:center;padding:10px 0;">
                                 <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${worstSession.title}</div>
-                                <div style="font-size:32px;font-weight:700;color:var(--text-tertiary);margin-bottom:8px;">¥${formatMoney(worstSession.displayGMV || worstSession.totalGMV)}</div>
+                                <div style="font-size:32px;font-weight:700;color:var(--text-tertiary);margin-bottom:8px;">¥${formatMoney(worstSession.dGMV)}</div>
                                 <div style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">${worstSession.date} · ${worstSession.host}</div>
                                 <div style="padding:12px;background:rgba(255,165,2,0.08);border-radius:8px;font-size:12px;color:var(--text-secondary);text-align:left;">
                                     <div style="font-weight:600;color:var(--warning-color);margin-bottom:6px;">💡 提升建议</div>
-                                    <div>• GMV较均值低 ${(((avgGMV - (worstSession.displayGMV || worstSession.totalGMV)) / avgGMV * 100)).toFixed(1)}%</div>
+                                    <div>• GMV较均值低 ${(((avgGMV - worstSession.dGMV) / avgGMV * 100)).toFixed(1)}%</div>
                                     <div>• 建议优化${filterInfo ? `「${filterInfo.categoryName}」类目的` : '选品'}策略，增加爆款商品</div>
                                 </div>
                             </div>
@@ -2225,8 +2297,8 @@ const App = {
                         <div class="bar-chart" style="height:200px;">
                             ${sortedSessions.map(s => `
                                 <div class="bar-item">
-                                    <div class="bar" style="height:${((s.displayGMV || s.totalGMV) / maxGMV * 100)}%" 
-                                         title="${s.title}: ¥${formatMoney(s.displayGMV || s.totalGMV)}${filterInfo ? '（仅筛选类目）' : ''}"></div>
+                                    <div class="bar" style="height:${(s.dGMV / maxGMV * 100)}%" 
+                                         title="${s.title}: ¥${formatMoney(s.dGMV)}${filterInfo ? '（仅筛选类目）' : ''}"></div>
                                     <div class="bar-label">${s.date.slice(5)}</div>
                                 </div>
                             `).join('')}
@@ -2313,9 +2385,9 @@ const App = {
                             </thead>
                             <tbody>
                                 ${sessions.map(s => {
-                                    const sGMV = s.displayGMV || s.totalGMV;
-                                    const sOrders = s.displayOrders || s.totalOrders;
-                                    const sRate = s.displayRate || s.conversionRate;
+                                    const sGMV = s.dGMV;
+                                    const sOrders = s.dOrders;
+                                    const sRate = s.dRate;
                                     const gmvDiff = avgGMV > 0 ? ((sGMV - avgGMV) / avgGMV * 100).toFixed(1) : 0;
                                     const isAboveAvg = sGMV >= avgGMV;
                                     return `
